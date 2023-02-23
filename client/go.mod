@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/joho/godotenv v1.5.1
+	github.com/zmb3/spotify v1.3.0
 	github.com/zmb3/spotify/v2 v2.3.1
 	golang.org/x/oauth2 v0.5.0
 )
