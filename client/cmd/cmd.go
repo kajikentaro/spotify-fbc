@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func init() {
 	// rand.Seed(time.Now().UnixNano())
 }
 
-func main() {
+func Execute() {
 	/* set up variables */
 	clientID := os.Getenv("CLIENT_ID")
 	clientSecret := os.Getenv("CLIENT_SECRET")
