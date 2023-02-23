@@ -15,16 +15,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "spotifyfbc",
-	Short: "spotifyfbc: Spotify file-based client",
-	Long: `Spotify file-based client
-  Edit your playlists by moving directories and file locations`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-	},
-}
-
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -33,14 +23,31 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(pullCmd)
-
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(pullCmd)
+	rootCmd.AddCommand(loginCmd)
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "spotifyfbc",
+	Short: "spotifyfbc: Spotify file-based client",
+	Long: `Spotify file-based client
+  Edit your playlists by moving directories and file locations`,
+}
+
+var loginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "TODO",
+	Long:  `login`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		genClient(ctx)
+	},
 }
 
 var versionCmd = &cobra.Command{
@@ -59,11 +66,7 @@ var pullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client := genClient(ctx)
-
-		/* generate model */
 		model := models.NewModel(client, ctx)
-
-		/* use API via model*/
 		model.PullPlaylists()
 	},
 }
