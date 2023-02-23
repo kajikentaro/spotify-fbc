@@ -81,15 +81,36 @@ func main() {
 	}
 
 	/* prepare Client */
-	httpClient := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(token))
+	httpClient := auth.Client(ctx, token)
 	client := spotify.New(httpClient)
 
 	/* use API */
-	user, err := client.CurrentUsersPlaylists(ctx)
+	playlists, err := client.CurrentUsersPlaylists(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(user)
+	for _, v := range playlists.Playlists {
+		createPlaylistDirectory(ctx, client, v)
+	}
+}
+
+func createPlaylistDirectory(ctx context.Context, client *spotify.Client, playlist spotify.SimplePlaylist) error {
+	// TODO: playlist.Name に /が含まれる場合を除く
+	err := os.Mkdir(playlist.Name, os.ModePerm)
+	if os.IsExist(err) {
+		log.Println(playlist.Name, "is already created")
+	}
+
+	playlistItemPage, err := client.GetPlaylistItems(ctx, playlist.ID)
+	if err != nil {
+		return err
+	}
+	for _, playlistItem := range playlistItemPage.Items {
+		track := playlistItem.Track.Track
+		// TODO: track.Name に /が含まれる場合を除く
+		ioutil.WriteFile(playlist.Name+"/"+track.Name+".txt", []byte(fmt.Sprintf("%v\n", track)), 0666)
+	}
+	return nil
 }
 
 func saveCache(token *oauth2.Token) error {
