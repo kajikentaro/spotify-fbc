@@ -3,9 +3,6 @@ package models
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
 
 	"github.com/zmb3/spotify/v2"
 )
@@ -21,10 +18,12 @@ func NewModel(client *spotify.Client, ctx context.Context) model {
 
 func (m *model) CreatePlaylistDirectory(playlist spotify.SimplePlaylist) error {
 	// TODO: playlist.Name に /が含まれる場合を除く
-	err := os.Mkdir(playlist.Name, os.ModePerm)
-	if os.IsExist(err) {
-		log.Println(playlist.Name, "is already created")
-	}
+	/*
+		err := os.Mkdir(playlist.Name, os.ModePerm)
+		if os.IsExist(err) {
+			log.Println(playlist.Name, "is already created")
+		}
+	*/
 
 	playlistItemPage, err := m.client.GetPlaylistItems(m.ctx, playlist.ID)
 	if err != nil {
@@ -33,7 +32,8 @@ func (m *model) CreatePlaylistDirectory(playlist spotify.SimplePlaylist) error {
 	for _, playlistItem := range playlistItemPage.Items {
 		track := playlistItem.Track.Track
 		// TODO: track.Name に /が含まれる場合を除く
-		ioutil.WriteFile(playlist.Name+"/"+track.Name+".txt", []byte(fmt.Sprintf("%v\n", track)), 0666)
+		// ioutil.WriteFile(playlist.Name+"/"+track.Name+".txt", []byte(fmt.Sprintf("%v\n", track)), 0666)
+		fmt.Println(track.Name)
 	}
 	return nil
 }
