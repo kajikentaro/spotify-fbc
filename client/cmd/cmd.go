@@ -31,6 +31,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(compareCmd)
 }
 
 var rootCmd = &cobra.Command{
@@ -38,6 +39,19 @@ var rootCmd = &cobra.Command{
 	Short: "spotifyfbc: Spotify file-based client",
 	Long: `Spotify file-based client
   Edit your playlists by moving directories and file locations`,
+}
+
+var compareCmd = &cobra.Command{
+	Use:   "compare",
+	Short: "TODO",
+	Long:  `login`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		client := genClient(ctx)
+		model := models.NewModel(client, ctx)
+		// TODO: spotify-fbcのファイル内にいる場合も対応できるように
+		model.ComparePlaylists("./spotify-fbc")
+	},
 }
 
 var loginCmd = &cobra.Command{
