@@ -143,7 +143,7 @@ func (m *model) PullPlaylists() error {
 	os.Mkdir(SPOTIFY_PLAYLIST_ROOT, os.ModePerm)
 	usedPlaylistName := map[string]struct{}{}
 
-	for _, v := range playlists.Playlists[:1] {
+	for _, v := range playlists.Playlists[:] {
 		// define a unduplicated directory name
 		name := replaceBannedCharacter(v.Name)
 		uniqueName := name

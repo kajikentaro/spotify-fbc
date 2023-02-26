@@ -1,0 +1,91 @@
+package models
+
+import "testing"
+
+func Test_TruckContent_marshal(t *testing.T) {
+	tc := TruckContent{
+		Id:      "123",
+		Name:    "test truck",
+		Artist:  "test artist",
+		Album:   "test album",
+		Seconds: "123",
+		Isrc:    "ABCDEFG",
+	}
+	actual, err := tc.marshal()
+	if err != nil {
+		t.Error(err)
+	}
+	expected :=
+		`id 123
+name test truck
+artist test artist
+album test album
+seconds 123
+isrc ABCDEFG
+`
+	if expected != actual {
+		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
+	}
+}
+
+func Test_PlaylistContent_marshal(t *testing.T) {
+	tc := PlaylistContent{
+		Id:      "123",
+		Name:    "test playlist name",
+		DirName: "test playlist name",
+	}
+	actual, err := tc.marshal()
+	if err != nil {
+		t.Error(err)
+	}
+	expected :=
+		`id 123
+name test playlist name
+dir_name test playlist name
+`
+	if expected != actual {
+		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
+	}
+}
+
+func Test_unmarshalPlaylistContent(t *testing.T) {
+	text :=
+		`id 123
+name test playlist name
+dir_name test playlist name
+`
+
+	actual := unmarshalPlaylistContent(text)
+	expected := PlaylistContent{
+		Id:      "123",
+		Name:    "test playlist name",
+		DirName: "test playlist name",
+	}
+	if expected != actual {
+		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
+	}
+}
+
+func Test_unmarshalTruckContent(t *testing.T) {
+	text :=
+		`id 123
+name test truck
+artist test artist
+album test album
+seconds 123
+isrc ABCDEFG
+`
+
+	actual := unmarshalTruckContent(text)
+	expected := TruckContent{
+		Id:      "123",
+		Name:    "test truck",
+		Artist:  "test artist",
+		Album:   "test album",
+		Seconds: "123",
+		Isrc:    "ABCDEFG",
+	}
+	if expected != actual {
+		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
+	}
+}
