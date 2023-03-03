@@ -47,7 +47,7 @@ func (m *model) ComparePlaylists() error {
 			// プレイリスト情報txtが存在する場合
 			localPLs = append(localPLs, w)
 		} else {
-			localPLs = append(localPLs, models.PlaylistContent{Name: v, DirName: v})
+			localPLs = append(localPLs, models.PlaylistContent{DirName: v})
 		}
 	}
 
@@ -63,7 +63,9 @@ func (m *model) ComparePlaylists() error {
 		idToPlaylist[v.Id] = v
 	}
 	for _, v := range remotePLs {
-		idToPlaylist[v.Id] = v
+		// 上書きしないように
+		old := idToPlaylist[v.Id]
+		idToPlaylist[v.Id] = models.PlaylistContent{Name: v.Name, DirName: old.DirName, Id: v.Id}
 	}
 
 	// localにあれば +1, remoteにあれば +2する
@@ -97,7 +99,7 @@ func (m *model) ComparePlaylists() error {
 	}
 
 	for _, v := range toAddPLs {
-		fmt.Println("+", v.Name)
+		fmt.Println("+", v.DirName)
 		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
 		if err != nil {
 			return err
@@ -109,23 +111,58 @@ func (m *model) ComparePlaylists() error {
 
 	for _, v := range toRemovePLs {
 		fmt.Println("-", v.Name)
-		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
+		tracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, v.Id)
 		if err != nil {
 			return err
 		}
 		for _, w := range tracks {
-			fmt.Println("  -", w.FileName)
+			fmt.Println("  -", w.Name)
 		}
 	}
 
 	for _, v := range indefinitePLs {
-		fmt.Println("?", v.Name)
-		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
+		fmt.Println(" ", v.Name)
+		localTracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
 		if err != nil {
 			return err
 		}
-		for _, w := range tracks {
-			fmt.Println("  ?", w.FileName)
+		remoteTracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, v.Id)
+		if err != nil {
+			return err
+		}
+
+		idToTrack := map[string]models.TrackContent{}
+		for _, v := range localTracks {
+			idToTrack[v.Id] = v
+		}
+		for _, v := range remoteTracks {
+			idToTrack[v.Id] = v
+		}
+
+		trackStatus := map[string]int{}
+		for _, v := range localTracks {
+			if v.Id == "" {
+				fmt.Println("  +", v.Name)
+			} else {
+				trackStatus[v.Id] += 1
+			}
+		}
+		for _, v := range remoteTracks {
+			trackStatus[v.Id] += 2
+		}
+
+		for id, bit := range trackStatus {
+			if bit == 1 {
+				// local only
+				fmt.Println("  +", idToTrack[id].Name)
+			}
+			if bit == 2 {
+				// remote only
+				fmt.Println("  -", idToTrack[id].Name)
+			}
+			if bit == 3 {
+				fmt.Println("   ", idToTrack[id].Name)
+			}
 		}
 	}
 
