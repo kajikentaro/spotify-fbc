@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,30 +31,96 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		return err
 	}
 
-	localDirsSet := map[string]struct{}{}
+	dirNameToPL := map[string]PlaylistContent{}
+	for _, e := range entries {
+		reText := regexp.MustCompile(".txt$")
+		if !reText.MatchString(e.Name()) || e.IsDir() {
+			// .txtで終わらないファイル, ディレクトリの場合
+			continue
+		}
+
+		// .txtで終わる名前のファイルの場合
+		b, err := os.ReadFile(filepath.Join(fbcPath, e.Name()))
+		if err != nil {
+			return fmt.Errorf("cannot read %s: %w", e.Name(), err)
+		}
+		p := unmarshalPlaylistContent(string(b))
+		dirNameToPL[p.DirName] = p
+	}
+
+	localPLs := []PlaylistContent{}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		localDirsSet[e.Name()] = struct{}{}
+		if v, isExist := dirNameToPL[e.Name()]; isExist {
+			// プレイリスト情報txtが存在する場合
+			localPLs = append(localPLs, v)
+		} else {
+			// プレイリスト情報txtが存在しない場合
+			localPLs = append(localPLs, PlaylistContent{Name: e.Name(), DirName: e.Name()})
+		}
 	}
 
-	remoteDirsSet := map[string]struct{}{}
+	remotePLs := []PlaylistContent{}
 	playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
 	if err != nil {
 		return err
 	}
 	for _, v := range playlists.Playlists {
-		remoteDirsSet[v.Name] = struct{}{}
+		remotePLs = append(remotePLs, PlaylistContent{Id: v.ID.String(), Name: v.Name})
 	}
 
-	fmt.Println(localDirsSet)
-	fmt.Println(remoteDirsSet)
+	// 新規作成するべきプレイリストの検索
+	toAddPLs := []PlaylistContent{}
+	for _, v := range localPLs {
+		if v.Id == "" {
+			toAddPLs = append(toAddPLs, v)
+			continue
+		}
+
+		isRemoteExist := false
+		for _, r := range remotePLs {
+			if v.Id == r.Id {
+				isRemoteExist = true
+				break
+			}
+		}
+		if !isRemoteExist {
+			toAddPLs = append(toAddPLs, v)
+			continue
+		}
+	}
+
+	// 削除するべきプレイリストの検索
+	toRemovePLs := []PlaylistContent{}
+	for _, v := range remotePLs {
+		isLocalExist := false
+		for _, l := range localPLs {
+			if v.Id == l.Id {
+				isLocalExist = true
+				break
+			}
+		}
+		if !isLocalExist {
+			toRemovePLs = append(toRemovePLs, v)
+			continue
+		}
+	}
+
+	fmt.Println("### ADD ###")
+	for _, v := range toAddPLs {
+		fmt.Println(v)
+	}
+	fmt.Println("\n### DELETE ###")
+	for _, v := range toRemovePLs {
+		fmt.Println(v)
+	}
 
 	/*
 		playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
 		if err != nil {
-			return err
+		return err
 		}
 		for _, v := range playlists.Playlists[:1] {
 			err := m.CreatePlaylistDirectory(v)
@@ -65,26 +132,40 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 	return nil
 }
 
-func (m *model) CreatePlaylistDirectory(uniqueName string, playlist spotify.SimplePlaylist) error {
+func (m *model) CreatePlaylistDirectory(playlist PlaylistContent) error {
 	// generate a playlist detail file
-	textContent := getPlaylistContent(uniqueName, playlist)
-	ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+uniqueName+".txt", []byte(textContent), 0666)
+	textContent, err := playlist.marshal()
+	if err != nil {
+		return err
+	}
+	ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName+".txt", []byte(textContent), 0666)
 
 	// generate a playlist directory
-	err := os.Mkdir(SPOTIFY_PLAYLIST_ROOT+"/"+replaceBannedCharacter(playlist.Name), os.ModePerm)
+	err = os.Mkdir(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName, os.ModePerm)
 	if os.IsExist(err) {
 		log.Println(playlist.Name, "is already created")
 	}
 
 	// generate a track file in the directory
-	playlistItemPage, err := m.client.GetPlaylistItems(m.ctx, playlist.ID)
+	playlistItemPage, err := m.client.GetPlaylistItems(m.ctx, spotify.ID(playlist.Id))
 	if err != nil {
 		return err
 	}
 	for _, playlistItem := range playlistItemPage.Items {
 		track := playlistItem.Track.Track
-		textContent := getTrackContent(track)
-		ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+uniqueName+"/"+replaceBannedCharacter(track.Name)+".txt", []byte(textContent), 0666)
+		trackContent := TrackContent{
+			Id:      track.ID.String(),
+			Name:    track.Name,
+			Artist:  joinArtistText(track.Artists),
+			Album:   track.Album.Name,
+			Seconds: strconv.Itoa(track.Duration),
+			Isrc:    track.ExternalIDs["isrc"],
+		}
+		textContent, err := trackContent.marshal()
+		if err != nil {
+			return err
+		}
+		ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName+"/"+replaceBannedCharacter(track.Name)+".txt", []byte(textContent), 0666)
 	}
 	return nil
 }
@@ -92,39 +173,6 @@ func (m *model) CreatePlaylistDirectory(uniqueName string, playlist spotify.Simp
 func replaceBannedCharacter(path string) string {
 	reg := regexp.MustCompile("[\\\\/:*?\"<>|]")
 	return reg.ReplaceAllString(path, " ")
-}
-
-func getPlaylistContent(dirName string, playlist spotify.SimplePlaylist) string {
-	dd := [][]string{
-		{"id", playlist.ID.String()},
-		{"name", playlist.Name},
-		{"dir_name", dirName},
-	}
-
-	text := ""
-	for _, d := range dd {
-		text += d[0] + " " + d[1] + "\n"
-	}
-
-	return text
-}
-
-func getTrackContent(track *spotify.FullTrack) string {
-	dd := [][]string{
-		{"id", track.ID.String()},
-		{"name", track.Name},
-		{"artist", joinArtistText(track.Artists)},
-		{"album", track.Album.Name},
-		{"seconds", strconv.Itoa(track.Duration)},
-		{"isrc", track.ExternalIDs["isrc"]},
-	}
-
-	text := ""
-	for _, d := range dd {
-		text += d[0] + " " + d[1] + "\n"
-	}
-
-	return text
 }
 
 func joinArtistText(artists []spotify.SimpleArtist) string {
@@ -156,7 +204,7 @@ func (m *model) PullPlaylists() error {
 		}
 		usedPlaylistName[name] = struct{}{}
 
-		err := m.CreatePlaylistDirectory(uniqueName, v)
+		err := m.CreatePlaylistDirectory(PlaylistContent{Id: v.ID.String(), Name: v.Name, DirName: uniqueName})
 		if err != nil {
 			return err
 		}

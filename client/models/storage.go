@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type TruckContent struct {
+type TrackContent struct {
 	Id      string `title:"id"`
 	Name    string `title:"name"`
 	Artist  string `title:"artist"`
@@ -20,8 +20,8 @@ type PlaylistContent struct {
 	DirName string `title:"dir_name"`
 }
 
-func unmarshalTruckContent(text string) TruckContent {
-	result := TruckContent{}
+func unmarshalTrackContent(text string) TrackContent {
+	result := TrackContent{}
 
 	entries := strings.Split(text, "\n")
 	ts := reflect.TypeOf(result)
@@ -73,7 +73,7 @@ func (p PlaylistContent) marshal() (string, error) {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 
-	result := ""
+	result := "NOTE: Do not delete or edit this file.\n\n"
 	for i := 0; i < ts.NumField(); i++ {
 		fieldValue := vs.Field(i).String()
 		result += ts.Field(i).Tag.Get("title") + " " + fieldValue + "\n"
@@ -81,7 +81,7 @@ func (p PlaylistContent) marshal() (string, error) {
 	return result, nil
 }
 
-func (p TruckContent) marshal() (string, error) {
+func (p TrackContent) marshal() (string, error) {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 

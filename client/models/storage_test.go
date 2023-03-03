@@ -2,10 +2,10 @@ package models
 
 import "testing"
 
-func Test_TruckContent_marshal(t *testing.T) {
-	tc := TruckContent{
+func Test_TrackContent_marshal(t *testing.T) {
+	tc := TrackContent{
 		Id:      "123",
-		Name:    "test truck",
+		Name:    "test track",
 		Artist:  "test artist",
 		Album:   "test album",
 		Seconds: "123",
@@ -17,7 +17,7 @@ func Test_TruckContent_marshal(t *testing.T) {
 	}
 	expected :=
 		`id 123
-name test truck
+name test track
 artist test artist
 album test album
 seconds 123
@@ -66,20 +66,20 @@ dir_name test playlist name
 	}
 }
 
-func Test_unmarshalTruckContent(t *testing.T) {
+func Test_unmarshalTrackContent(t *testing.T) {
 	text :=
 		`id 123
-name test truck
+name test track
 artist test artist
 album test album
 seconds 123
 isrc ABCDEFG
 `
 
-	actual := unmarshalTruckContent(text)
-	expected := TruckContent{
+	actual := unmarshalTrackContent(text)
+	expected := TrackContent{
 		Id:      "123",
-		Name:    "test truck",
+		Name:    "test track",
 		Artist:  "test artist",
 		Album:   "test album",
 		Seconds: "123",
