@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 
 	"github.com/zmb3/spotify/v2"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
@@ -107,7 +108,7 @@ func (l *login) GetCachePath() (string, error) {
 		return "", err
 	}
 
-	return homeDir + "/.spotify-file-based-client.json", nil
+	return filepath.Join(homeDir, ".spotify-file-based-client.json"), nil
 }
 
 func getRandomStr() string {

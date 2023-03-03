@@ -3,7 +3,6 @@ package models
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -31,6 +30,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		return err
 	}
 
+	// プレイリスト情報txtファイルを読み込み
 	dirNameToPL := map[string]PlaylistContent{}
 	for _, e := range entries {
 		reText := regexp.MustCompile(".txt$")
@@ -48,6 +48,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		dirNameToPL[p.DirName] = p
 	}
 
+	// ディレクトリを "プレイリスト情報txtファイル" の情報と関連付けて, 配列として保存
 	localPLs := []PlaylistContent{}
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -62,6 +63,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		}
 	}
 
+	// リモートのプレイリストを配列で取得
 	remotePLs := []PlaylistContent{}
 	playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
 	if err != nil {
@@ -108,13 +110,53 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		}
 	}
 
-	fmt.Println("### ADD ###")
-	for _, v := range toAddPLs {
-		fmt.Println(v)
+	// 追加/削除しないプレイリストの検索
+	indefinitePLs := []PlaylistContent{}
+	for _, v := range remotePLs {
+		isLocalExist := false
+		for _, l := range localPLs {
+			if v.Id == l.Id {
+				isLocalExist = true
+				break
+			}
+		}
+		if isLocalExist {
+			indefinitePLs = append(indefinitePLs, v)
+			continue
+		}
 	}
-	fmt.Println("\n### DELETE ###")
+
+	for _, v := range toAddPLs {
+		fmt.Println("+", v.Name)
+		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		if err != nil {
+			return err
+		}
+		for _, w := range tracks {
+			fmt.Println("  +", w.FileName)
+		}
+	}
+
 	for _, v := range toRemovePLs {
-		fmt.Println(v)
+		fmt.Println("-", v.Name)
+		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		if err != nil {
+			return err
+		}
+		for _, w := range tracks {
+			fmt.Println("  -", w.FileName)
+		}
+	}
+
+	for _, v := range indefinitePLs {
+		fmt.Println("?", v.Name)
+		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		if err != nil {
+			return err
+		}
+		for _, w := range tracks {
+			fmt.Println("  ?", w.FileName)
+		}
 	}
 
 	/*
@@ -132,16 +174,45 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 	return nil
 }
 
+func readLocalPlaylistTrack(dirPath string) ([]TrackContent, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory '%s': %w", dirPath, err)
+	}
+
+	// プレイリスト情報txtファイルを読み込み
+	tracks := []TrackContent{}
+	for _, e := range entries {
+		reText := regexp.MustCompile(".txt$")
+		if !reText.MatchString(e.Name()) || e.IsDir() {
+			// .txtで終わらないファイル, ディレクトリの場合
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(dirPath, e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file '%s': %w", filepath.Join(dirPath, e.Name()), err)
+		}
+		t := unmarshalTrackContent(string(content))
+		if t.FileName == "" {
+			// ユーザーが新規作成したTrackのtxtにはおそらくfile_nameプロパティが無い
+			t.FileName = e.Name()
+		}
+		if t.FileName != e.Name() {
+			log.Printf("Warning: a file_name property was incorrect. The property in the file was '%s', but path was '%s'.", t.FileName, e.Name())
+			t.FileName = e.Name()
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, nil
+}
+
 func (m *model) CreatePlaylistDirectory(playlist PlaylistContent) error {
 	// generate a playlist detail file
-	textContent, err := playlist.marshal()
-	if err != nil {
-		return err
-	}
-	ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName+".txt", []byte(textContent), 0666)
+	textContent := playlist.marshal()
+	os.WriteFile(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName+".txt"), []byte(textContent), 0666)
 
 	// generate a playlist directory
-	err = os.Mkdir(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName, os.ModePerm)
+	err := os.Mkdir(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName), os.ModePerm)
 	if os.IsExist(err) {
 		log.Println(playlist.Name, "is already created")
 	}
@@ -151,21 +222,21 @@ func (m *model) CreatePlaylistDirectory(playlist PlaylistContent) error {
 	if err != nil {
 		return err
 	}
+	usedTrackNames := map[string]struct{}{}
 	for _, playlistItem := range playlistItemPage.Items {
 		track := playlistItem.Track.Track
+		fileName := unique(&usedTrackNames, replaceBannedCharacter(track.Name)) + ".txt"
 		trackContent := TrackContent{
-			Id:      track.ID.String(),
-			Name:    track.Name,
-			Artist:  joinArtistText(track.Artists),
-			Album:   track.Album.Name,
-			Seconds: strconv.Itoa(track.Duration),
-			Isrc:    track.ExternalIDs["isrc"],
+			Id:       track.ID.String(),
+			Name:     track.Name,
+			Artist:   joinArtistText(track.Artists),
+			Album:    track.Album.Name,
+			Seconds:  strconv.Itoa(track.Duration),
+			Isrc:     track.ExternalIDs["isrc"],
+			FileName: fileName,
 		}
-		textContent, err := trackContent.marshal()
-		if err != nil {
-			return err
-		}
-		ioutil.WriteFile(SPOTIFY_PLAYLIST_ROOT+"/"+playlist.DirName+"/"+replaceBannedCharacter(track.Name)+".txt", []byte(textContent), 0666)
+		textContent := trackContent.marshal()
+		os.WriteFile(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName, fileName), []byte(textContent), 0666)
 	}
 	return nil
 }
@@ -189,20 +260,12 @@ func (m *model) PullPlaylists() error {
 		return err
 	}
 	os.Mkdir(SPOTIFY_PLAYLIST_ROOT, os.ModePerm)
-	usedPlaylistName := map[string]struct{}{}
 
+	usedPlaylistName := map[string]struct{}{}
 	for _, v := range playlists.Playlists[:] {
 		// define a unduplicated directory name
 		name := replaceBannedCharacter(v.Name)
-		uniqueName := name
-		for i := 2; i < 1e7; i++ {
-			if _, isDuplicated := usedPlaylistName[uniqueName]; isDuplicated {
-				uniqueName = name + " " + strconv.Itoa(i)
-			} else {
-				break
-			}
-		}
-		usedPlaylistName[name] = struct{}{}
+		uniqueName := unique(&usedPlaylistName, name)
 
 		err := m.CreatePlaylistDirectory(PlaylistContent{Id: v.ID.String(), Name: v.Name, DirName: uniqueName})
 		if err != nil {
@@ -210,4 +273,25 @@ func (m *model) PullPlaylists() error {
 		}
 	}
 	return nil
+}
+
+// stemNameがすでにusedSetに存在する場合は末尾に連番の数字を足したものを返す
+/* 例:
+ * usedSet := map[string]struct{}{}
+ * res := unique(usedSet, "hoge")
+ * // res is "hoge"
+ * res := unique(usedSet, "hoge")
+ * // res is "hoge 2"
+ */
+func unique(usedSet *map[string]struct{}, stemName string) string {
+	uniqueName := stemName
+	for i := 2; i < 1e7; i++ {
+		if _, isDuplicated := (*usedSet)[uniqueName]; isDuplicated {
+			uniqueName = stemName + " " + strconv.Itoa(i)
+		} else {
+			break
+		}
+	}
+	(*usedSet)[uniqueName] = struct{}{}
+	return uniqueName
 }

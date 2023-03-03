@@ -6,12 +6,13 @@ import (
 )
 
 type TrackContent struct {
-	Id      string `title:"id"`
-	Name    string `title:"name"`
-	Artist  string `title:"artist"`
-	Album   string `title:"album"`
-	Seconds string `title:"seconds"`
-	Isrc    string `title:"isrc"`
+	Id       string `title:"id"`
+	Name     string `title:"name"`
+	Artist   string `title:"artist"`
+	Album    string `title:"album"`
+	Seconds  string `title:"seconds"`
+	Isrc     string `title:"isrc"`
+	FileName string `title:"file_name"`
 }
 
 type PlaylistContent struct {
@@ -69,7 +70,7 @@ func unmarshalPlaylistContent(text string) PlaylistContent {
 	return result
 }
 
-func (p PlaylistContent) marshal() (string, error) {
+func (p PlaylistContent) marshal() string {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 
@@ -78,10 +79,10 @@ func (p PlaylistContent) marshal() (string, error) {
 		fieldValue := vs.Field(i).String()
 		result += ts.Field(i).Tag.Get("title") + " " + fieldValue + "\n"
 	}
-	return result, nil
+	return result
 }
 
-func (p TrackContent) marshal() (string, error) {
+func (p TrackContent) marshal() string {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 
@@ -90,5 +91,5 @@ func (p TrackContent) marshal() (string, error) {
 		fieldValue := vs.Field(i).String()
 		result += ts.Field(i).Tag.Get("title") + " " + fieldValue + "\n"
 	}
-	return result, nil
+	return result
 }

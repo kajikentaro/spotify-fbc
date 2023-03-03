@@ -4,17 +4,15 @@ import "testing"
 
 func Test_TrackContent_marshal(t *testing.T) {
 	tc := TrackContent{
-		Id:      "123",
-		Name:    "test track",
-		Artist:  "test artist",
-		Album:   "test album",
-		Seconds: "123",
-		Isrc:    "ABCDEFG",
+		Id:       "123",
+		Name:     "test track",
+		Artist:   "test artist",
+		Album:    "test album",
+		Seconds:  "123",
+		Isrc:     "ABCDEFG",
+		FileName: "test track.txt",
 	}
-	actual, err := tc.marshal()
-	if err != nil {
-		t.Error(err)
-	}
+	actual := tc.marshal()
 	expected :=
 		`id 123
 name test track
@@ -22,6 +20,7 @@ artist test artist
 album test album
 seconds 123
 isrc ABCDEFG
+file_name test track.txt
 `
 	if expected != actual {
 		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
@@ -34,12 +33,11 @@ func Test_PlaylistContent_marshal(t *testing.T) {
 		Name:    "test playlist name",
 		DirName: "test playlist name",
 	}
-	actual, err := tc.marshal()
-	if err != nil {
-		t.Error(err)
-	}
+	actual := tc.marshal()
 	expected :=
-		`id 123
+		`NOTE: Do not delete or edit this file.
+
+id 123
 name test playlist name
 dir_name test playlist name
 `
@@ -74,16 +72,18 @@ artist test artist
 album test album
 seconds 123
 isrc ABCDEFG
+file_name test track.txt
 `
 
 	actual := unmarshalTrackContent(text)
 	expected := TrackContent{
-		Id:      "123",
-		Name:    "test track",
-		Artist:  "test artist",
-		Album:   "test album",
-		Seconds: "123",
-		Isrc:    "ABCDEFG",
+		Id:       "123",
+		Name:     "test track",
+		Artist:   "test artist",
+		Album:    "test album",
+		Seconds:  "123",
+		Isrc:     "ABCDEFG",
+		FileName: "test track.txt",
 	}
 	if expected != actual {
 		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
