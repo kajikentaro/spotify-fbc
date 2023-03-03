@@ -15,6 +15,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+var SPOTIFY_PLAYLIST_ROOT = "spotify-fbc"
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -48,9 +50,8 @@ var compareCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client := genClient(ctx)
-		model := services.NewModel(client, ctx)
-		// TODO: spotify-fbcのファイル内にいる場合も対応できるように
-		model.ComparePlaylists("./spotify-fbc")
+		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		model.ComparePlaylists()
 	},
 }
 
@@ -80,7 +81,7 @@ var pullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client := genClient(ctx)
-		model := services.NewModel(client, ctx)
+		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model.PullPlaylists()
 	},
 }

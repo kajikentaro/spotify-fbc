@@ -3,77 +3,61 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
+	"github.com/kajikentaro/spotify-file-based-client/client/repositories"
 	"github.com/zmb3/spotify/v2"
 )
 
 type model struct {
-	client *spotify.Client
-	ctx    context.Context
+	client   *spotify.Client
+	ctx      context.Context
+	rootPath string
 }
 
-var SPOTIFY_PLAYLIST_ROOT = "spotify-fbc"
-
-func NewModel(client *spotify.Client, ctx context.Context) model {
-	return model{client: client, ctx: ctx}
+func NewModel(client *spotify.Client, ctx context.Context, rootPath string) model {
+	return model{client: client, ctx: ctx, rootPath: rootPath}
 }
 
-func (m *model) ComparePlaylists(fbcPath string) error {
-	entries, err := os.ReadDir(fbcPath)
+func (m *model) ComparePlaylists() error {
+	// プレイリスト情報のテキストファイル読み込み
+	playlistContents, err := repositories.FetchLocalPlaylistContent(m.rootPath)
 	if err != nil {
 		return err
 	}
-
-	// プレイリスト情報txtファイルを読み込み
+	// 検索しやすいようにmapにする
 	dirNameToPL := map[string]models.PlaylistContent{}
-	for _, e := range entries {
-		reText := regexp.MustCompile(".txt$")
-		if !reText.MatchString(e.Name()) || e.IsDir() {
-			// .txtで終わらないファイル, ディレクトリの場合
-			continue
-		}
-
-		// .txtで終わる名前のファイルの場合
-		b, err := os.ReadFile(filepath.Join(fbcPath, e.Name()))
-		if err != nil {
-			return fmt.Errorf("cannot read %s: %w", e.Name(), err)
-		}
-		p := models.UnmarshalPlaylistContent(string(b))
-		dirNameToPL[p.DirName] = p
+	for _, v := range playlistContents {
+		dirNameToPL[v.DirName] = v
 	}
 
-	// ディレクトリを "プレイリスト情報txtファイル" の情報と関連付けて, 配列として保存
+	// ディレクトリの一覧を取得
+	dirs, err := repositories.FetchLocalPlaylistDir(m.rootPath)
+	if err != nil {
+		return err
+	}
+	// ディレクトリを "プレイリスト情報のテキストファイル" の情報と関連付けて配列で保存
 	localPLs := []models.PlaylistContent{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		if v, isExist := dirNameToPL[e.Name()]; isExist {
+	for _, v := range dirs {
+		if w, isExist := dirNameToPL[v]; isExist {
 			// プレイリスト情報txtが存在する場合
-			localPLs = append(localPLs, v)
+			localPLs = append(localPLs, w)
 		} else {
-			// プレイリスト情報txtが存在しない場合
-			localPLs = append(localPLs, models.PlaylistContent{Name: e.Name(), DirName: e.Name()})
+			localPLs = append(localPLs, models.PlaylistContent{Name: v, DirName: v})
 		}
 	}
 
 	// リモートのプレイリストを配列で取得
-	remotePLs := []models.PlaylistContent{}
-	playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
+	remotePLs, err := repositories.FetchRemotePlaylistContent(m.client, m.ctx)
 	if err != nil {
 		return err
 	}
-	for _, v := range playlists.Playlists {
-		remotePLs = append(remotePLs, models.PlaylistContent{Id: v.ID.String(), Name: v.Name})
-	}
 
+	// 検索しやすいようにmapを作成
 	idToPlaylist := map[string]models.PlaylistContent{}
 	for _, v := range localPLs {
 		idToPlaylist[v.Id] = v
@@ -114,7 +98,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 
 	for _, v := range toAddPLs {
 		fmt.Println("+", v.Name)
-		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
 		if err != nil {
 			return err
 		}
@@ -125,7 +109,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 
 	for _, v := range toRemovePLs {
 		fmt.Println("-", v.Name)
-		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
 		if err != nil {
 			return err
 		}
@@ -136,7 +120,7 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 
 	for _, v := range indefinitePLs {
 		fmt.Println("?", v.Name)
-		tracks, err := readLocalPlaylistTrack(filepath.Join(fbcPath, v.DirName))
+		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
 		if err != nil {
 			return err
 		}
@@ -145,84 +129,33 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		}
 	}
 
-	/*
-		playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
-		if err != nil {
-		return err
-		}
-		for _, v := range playlists.Playlists[:1] {
-			err := m.CreatePlaylistDirectory(v)
-			if err != nil {
-				return err
-			}
-		}
-	*/
 	return nil
-}
-
-func readLocalPlaylistTrack(dirPath string) ([]models.TrackContent, error) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory '%s': %w", dirPath, err)
-	}
-
-	// プレイリスト情報txtファイルを読み込み
-	tracks := []models.TrackContent{}
-	for _, e := range entries {
-		reText := regexp.MustCompile(".txt$")
-		if !reText.MatchString(e.Name()) || e.IsDir() {
-			// .txtで終わらないファイル, ディレクトリの場合
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(dirPath, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file '%s': %w", filepath.Join(dirPath, e.Name()), err)
-		}
-		t := models.UnmarshalTrackContent(string(content))
-		if t.FileName == "" {
-			// ユーザーが新規作成したTrackのtxtにはおそらくfile_nameプロパティが無い
-			t.FileName = e.Name()
-		}
-		if t.FileName != e.Name() {
-			log.Printf("Warning: a file_name property was incorrect. The property in the file was '%s', but path was '%s'.", t.FileName, e.Name())
-			t.FileName = e.Name()
-		}
-		tracks = append(tracks, t)
-	}
-	return tracks, nil
 }
 
 func (m *model) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
 	// generate a playlist detail file
-	textContent := playlist.Marshal()
-	os.WriteFile(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName+".txt"), []byte(textContent), 0666)
-
-	// generate a playlist directory
-	err := os.Mkdir(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName), os.ModePerm)
-	if os.IsExist(err) {
-		log.Println(playlist.Name, "is already created")
-	}
-
-	// generate a track file in the directory
-	playlistItemPage, err := m.client.GetPlaylistItems(m.ctx, spotify.ID(playlist.Id))
+	err := repositories.CreatePlaylistContent(m.rootPath, playlist)
 	if err != nil {
 		return err
 	}
+
+	// generate a playlist directory
+	err = repositories.CreatePlaylistDirectory(m.rootPath, playlist)
+	if err != nil {
+		return err
+	}
+
+	playlistTrack, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, playlist.Id)
+	if err != nil {
+		return err
+	}
+
+	// generate a track file in the directory
 	usedTrackNames := map[string]struct{}{}
-	for _, playlistItem := range playlistItemPage.Items {
-		track := playlistItem.Track.Track
-		fileName := unique(&usedTrackNames, replaceBannedCharacter(track.Name)) + ".txt"
-		trackContent := models.TrackContent{
-			Id:       track.ID.String(),
-			Name:     track.Name,
-			Artist:   joinArtistText(track.Artists),
-			Album:    track.Album.Name,
-			Seconds:  strconv.Itoa(track.Duration),
-			Isrc:     track.ExternalIDs["isrc"],
-			FileName: fileName,
-		}
-		textContent := trackContent.Marshal()
-		os.WriteFile(filepath.Join(SPOTIFY_PLAYLIST_ROOT, playlist.DirName, fileName), []byte(textContent), 0666)
+	for _, track := range playlistTrack {
+		fileStem := replaceBannedCharacter(track.Name)
+		track.FileName = unique(&usedTrackNames, fileStem) + ".txt"
+		repositories.CreateTrackContent(filepath.Join(m.rootPath, playlist.DirName), track)
 	}
 	return nil
 }
@@ -232,20 +165,12 @@ func replaceBannedCharacter(path string) string {
 	return reg.ReplaceAllString(path, " ")
 }
 
-func joinArtistText(artists []spotify.SimpleArtist) string {
-	text := []string{}
-	for _, a := range artists {
-		text = append(text, a.Name)
-	}
-	return strings.Join(text, ", ")
-}
-
 func (m *model) PullPlaylists() error {
 	playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
 	if err != nil {
 		return err
 	}
-	os.Mkdir(SPOTIFY_PLAYLIST_ROOT, os.ModePerm)
+	os.Mkdir(m.rootPath, os.ModePerm)
 
 	usedPlaylistName := map[string]struct{}{}
 	for _, v := range playlists.Playlists[:] {
