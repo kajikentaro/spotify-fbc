@@ -73,56 +73,41 @@ func (m *model) ComparePlaylists(fbcPath string) error {
 		remotePLs = append(remotePLs, PlaylistContent{Id: v.ID.String(), Name: v.Name})
 	}
 
-	// 新規作成するべきプレイリストの検索
-	toAddPLs := []PlaylistContent{}
+	idToPlaylist := map[string]PlaylistContent{}
+	for _, v := range localPLs {
+		idToPlaylist[v.Id] = v
+	}
+	for _, v := range remotePLs {
+		idToPlaylist[v.Id] = v
+	}
+
+	// localにあれば +1, remoteにあれば +2する
+	// 1ならlocalのみ, 2ならremoteのみ, 3なら両方に存在することになる
+	playlistState := map[string]int{}
+	localOnly := []PlaylistContent{}
 	for _, v := range localPLs {
 		if v.Id == "" {
-			toAddPLs = append(toAddPLs, v)
+			localOnly = append(localOnly, v)
 			continue
 		}
-
-		isRemoteExist := false
-		for _, r := range remotePLs {
-			if v.Id == r.Id {
-				isRemoteExist = true
-				break
-			}
-		}
-		if !isRemoteExist {
-			toAddPLs = append(toAddPLs, v)
-			continue
-		}
+		playlistState[v.Id] += 1
+	}
+	for _, v := range remotePLs {
+		playlistState[v.Id] += 2
 	}
 
-	// 削除するべきプレイリストの検索
+	toAddPLs := localOnly
 	toRemovePLs := []PlaylistContent{}
-	for _, v := range remotePLs {
-		isLocalExist := false
-		for _, l := range localPLs {
-			if v.Id == l.Id {
-				isLocalExist = true
-				break
-			}
-		}
-		if !isLocalExist {
-			toRemovePLs = append(toRemovePLs, v)
-			continue
-		}
-	}
-
-	// 追加/削除しないプレイリストの検索
 	indefinitePLs := []PlaylistContent{}
-	for _, v := range remotePLs {
-		isLocalExist := false
-		for _, l := range localPLs {
-			if v.Id == l.Id {
-				isLocalExist = true
-				break
-			}
+	for id, bit := range playlistState {
+		if bit == 1 {
+			toAddPLs = append(toAddPLs, idToPlaylist[id])
 		}
-		if isLocalExist {
-			indefinitePLs = append(indefinitePLs, v)
-			continue
+		if bit == 2 {
+			toRemovePLs = append(toRemovePLs, idToPlaylist[id])
+		}
+		if bit == 3 {
+			indefinitePLs = append(indefinitePLs, idToPlaylist[id])
 		}
 	}
 
