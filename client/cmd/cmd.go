@@ -8,7 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/kajikentaro/spotify-file-based-client/client/logins"
-	"github.com/kajikentaro/spotify-file-based-client/client/models"
+	"github.com/kajikentaro/spotify-file-based-client/client/services"
 	"github.com/spf13/cobra"
 	"github.com/zmb3/spotify/v2"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
@@ -48,7 +48,7 @@ var compareCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client := genClient(ctx)
-		model := models.NewModel(client, ctx)
+		model := services.NewModel(client, ctx)
 		// TODO: spotify-fbcのファイル内にいる場合も対応できるように
 		model.ComparePlaylists("./spotify-fbc")
 	},
@@ -80,7 +80,7 @@ var pullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client := genClient(ctx)
-		model := models.NewModel(client, ctx)
+		model := services.NewModel(client, ctx)
 		model.PullPlaylists()
 	},
 }

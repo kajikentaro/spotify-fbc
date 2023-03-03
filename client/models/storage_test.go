@@ -2,7 +2,7 @@ package models
 
 import "testing"
 
-func Test_TrackContent_marshal(t *testing.T) {
+func Test_TrackContent_Marshal(t *testing.T) {
 	tc := TrackContent{
 		Id:       "123",
 		Name:     "test track",
@@ -12,7 +12,7 @@ func Test_TrackContent_marshal(t *testing.T) {
 		Isrc:     "ABCDEFG",
 		FileName: "test track.txt",
 	}
-	actual := tc.marshal()
+	actual := tc.Marshal()
 	expected :=
 		`id 123
 name test track
@@ -27,13 +27,13 @@ file_name test track.txt
 	}
 }
 
-func Test_PlaylistContent_marshal(t *testing.T) {
+func Test_PlaylistContent_Marshal(t *testing.T) {
 	tc := PlaylistContent{
 		Id:      "123",
 		Name:    "test playlist name",
 		DirName: "test playlist name",
 	}
-	actual := tc.marshal()
+	actual := tc.Marshal()
 	expected :=
 		`NOTE: Do not delete or edit this file.
 
@@ -46,14 +46,14 @@ dir_name test playlist name
 	}
 }
 
-func Test_unmarshalPlaylistContent(t *testing.T) {
+func Test_UnmarshalPlaylistContent(t *testing.T) {
 	text :=
 		`id 123
 name test playlist name
 dir_name test playlist name
 `
 
-	actual := unmarshalPlaylistContent(text)
+	actual := UnmarshalPlaylistContent(text)
 	expected := PlaylistContent{
 		Id:      "123",
 		Name:    "test playlist name",
@@ -64,7 +64,7 @@ dir_name test playlist name
 	}
 }
 
-func Test_unmarshalTrackContent(t *testing.T) {
+func Test_UnmarshalTrackContent(t *testing.T) {
 	text :=
 		`id 123
 name test track
@@ -75,7 +75,7 @@ isrc ABCDEFG
 file_name test track.txt
 `
 
-	actual := unmarshalTrackContent(text)
+	actual := UnmarshalTrackContent(text)
 	expected := TrackContent{
 		Id:       "123",
 		Name:     "test track",

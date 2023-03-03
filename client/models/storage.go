@@ -21,7 +21,7 @@ type PlaylistContent struct {
 	DirName string `title:"dir_name"`
 }
 
-func unmarshalTrackContent(text string) TrackContent {
+func UnmarshalTrackContent(text string) TrackContent {
 	result := TrackContent{}
 
 	entries := strings.Split(text, "\n")
@@ -45,7 +45,7 @@ func unmarshalTrackContent(text string) TrackContent {
 	}
 	return result
 }
-func unmarshalPlaylistContent(text string) PlaylistContent {
+func UnmarshalPlaylistContent(text string) PlaylistContent {
 	result := PlaylistContent{}
 
 	entries := strings.Split(text, "\n")
@@ -70,7 +70,7 @@ func unmarshalPlaylistContent(text string) PlaylistContent {
 	return result
 }
 
-func (p PlaylistContent) marshal() string {
+func (p PlaylistContent) Marshal() string {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 
@@ -82,7 +82,7 @@ func (p PlaylistContent) marshal() string {
 	return result
 }
 
-func (p TrackContent) marshal() string {
+func (p TrackContent) Marshal() string {
 	ts := reflect.TypeOf(p)
 	vs := reflect.ValueOf(p)
 
