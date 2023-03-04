@@ -51,7 +51,9 @@ var compareCmd = &cobra.Command{
 		ctx := context.Background()
 		client := genClient(ctx)
 		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model.ComparePlaylists()
+		if err := model.ComparePlaylists(); err != nil {
+			log.Fatalf(err.Error())
+		}
 	},
 }
 
@@ -82,7 +84,9 @@ var pullCmd = &cobra.Command{
 		ctx := context.Background()
 		client := genClient(ctx)
 		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model.PullPlaylists()
+		if err := model.PullPlaylists(); err != nil {
+			log.Fatalf(err.Error())
+		}
 	},
 }
 

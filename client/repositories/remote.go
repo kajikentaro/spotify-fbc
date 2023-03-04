@@ -24,22 +24,28 @@ func FetchRemotePlaylistContent(client *spotify.Client, ctx context.Context) ([]
 }
 
 func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id string) ([]models.TrackContent, error) {
-	playlistItemPage, err := client.GetPlaylistItems(ctx, spotify.ID(id))
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch playlist %s", id)
-	}
+	LIMIT := 100
 	result := []models.TrackContent{}
-	for _, playlistItem := range playlistItemPage.Items {
-		track := playlistItem.Track.Track
-		trackContent := models.TrackContent{
-			Id:      track.ID.String(),
-			Name:    track.Name,
-			Artist:  joinArtistText(track.Artists),
-			Album:   track.Album.Name,
-			Seconds: strconv.Itoa(track.Duration),
-			Isrc:    track.ExternalIDs["isrc"],
+	for offset := 0; true; offset += 100 {
+		playlistItemPage, err := client.GetPlaylistItems(ctx, spotify.ID(id), spotify.Limit(LIMIT), spotify.Offset(offset))
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch playlist %s: %s", id, err)
 		}
-		result = append(result, trackContent)
+		for _, playlistItem := range playlistItemPage.Items {
+			track := playlistItem.Track.Track
+			trackContent := models.TrackContent{
+				Id:      track.ID.String(),
+				Name:    track.Name,
+				Artist:  joinArtistText(track.Artists),
+				Album:   track.Album.Name,
+				Seconds: strconv.Itoa(track.Duration),
+				Isrc:    track.ExternalIDs["isrc"],
+			}
+			result = append(result, trackContent)
+		}
+		if len(playlistItemPage.Items) != LIMIT {
+			break
+		}
 	}
 	return result, nil
 }
