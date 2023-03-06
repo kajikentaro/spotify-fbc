@@ -128,3 +128,37 @@ func RemoveTrackContent(dirPath string, track models.TrackContent) error {
 	}
 	return nil
 }
+
+// 不要なプレイリスト情報txtファイルを消去する
+func CleanUpPlaylistContent(rootPath string) ([]string, error) {
+	dirs, err := FetchLocalPlaylistDir(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	contents, err := FetchLocalPlaylistContent(rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	txtIsUsed := map[string]bool{}
+	for _, c := range contents {
+		txtIsUsed[c.DirName] = false
+	}
+
+	for _, d := range dirs {
+		txtIsUsed[d] = true
+	}
+
+	deletedFiles := []string{}
+	for dirName, isUsed := range txtIsUsed {
+		if !isUsed {
+			fName := filepath.Join(rootPath, dirName+".txt")
+			err := os.Remove(fName)
+			if err != nil {
+				return deletedFiles, fmt.Errorf("failed to remove the unused playlist content '%s': %w", fName, err)
+			}
+			deletedFiles = append(deletedFiles, fName)
+		}
+	}
+	return deletedFiles, nil
+}

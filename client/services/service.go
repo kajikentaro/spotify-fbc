@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -133,6 +134,15 @@ func (m *model) PushPlaylists() error {
 	}
 
 	fmt.Println(warnMessage)
+
+	// 後片付け.不要なプレイリストテキストを消去
+	deleted, err := repositories.CleanUpPlaylistContent(m.rootPath)
+	for d := range deleted {
+		log.Println(d, "was deleted.")
+	}
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

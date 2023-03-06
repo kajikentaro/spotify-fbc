@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/kajikentaro/spotify-file-based-client/client/logins"
+	"github.com/kajikentaro/spotify-file-based-client/client/repositories"
 	"github.com/kajikentaro/spotify-file-based-client/client/services"
 	"github.com/spf13/cobra"
 	"github.com/zmb3/spotify/v2"
@@ -40,6 +41,22 @@ func init() {
 	rootCmd.AddCommand(logoutCmd)
 	rootCmd.AddCommand(compareCmd)
 	rootCmd.AddCommand(pushCmd)
+	rootCmd.AddCommand(cleanCmd)
+}
+
+var cleanCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "clean up unused playlist entity txt",
+	Long:  `clean up unused playlist entity txt`,
+	Run: func(cmd *cobra.Command, args []string) {
+		deleted, err := repositories.CleanUpPlaylistContent(SPOTIFY_PLAYLIST_ROOT)
+		for d := range deleted {
+			log.Println(d, "was deleted.")
+		}
+		if err != nil {
+			log.Fatalln(err)
+		}
+	},
 }
 
 var rootCmd = &cobra.Command{
@@ -49,10 +66,11 @@ var rootCmd = &cobra.Command{
   Edit your playlists by moving directories and file locations`,
 }
 
+// TODO: 特定プレイリストのみのpush機能
 var pushCmd = &cobra.Command{
 	Use:   "push",
-	Short: "TODO",
-	Long:  `TODO`,
+	Short: "Synchronize your local files and directories with your spotify account.",
+	Long:  `Synchronize your local files and directories with your spotify account`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := genClient(ctx)
