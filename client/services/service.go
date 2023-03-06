@@ -1,8 +1,10 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -380,7 +382,9 @@ func (m *model) PullPlaylists() error {
 		return err
 	}
 	if err := m.repository.CreateRootDir(); err != nil {
-		return err
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
 	}
 
 	usedPlaylistName := map[string]struct{}{}
