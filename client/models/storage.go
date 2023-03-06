@@ -111,6 +111,9 @@ func (p TrackContent) SearchQuery() string {
 			continue
 		}
 		fieldValue := vs.Field(i).String()
+		if fieldValue == "" {
+			continue
+		}
 		// 曲名のときはタグを付けない
 		if titleValue == "" {
 			result += fieldValue + " "
