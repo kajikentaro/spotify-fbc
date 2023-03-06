@@ -3,8 +3,6 @@ package repositories
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
 	"github.com/zmb3/spotify/v2"
@@ -17,7 +15,8 @@ func FetchRemotePlaylistContent(client *spotify.Client, ctx context.Context) ([]
 		return nil, err
 	}
 	for _, v := range playlists.Playlists {
-		result = append(result, models.PlaylistContent{Id: v.ID.String(), Name: v.Name})
+		content := models.SimplePlaylistToContent(v)
+		result = append(result, content)
 	}
 
 	return result, nil
@@ -33,14 +32,7 @@ func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id st
 		}
 		for _, playlistItem := range playlistItemPage.Items {
 			track := playlistItem.Track.Track
-			trackContent := models.TrackContent{
-				Id:      track.ID.String(),
-				Name:    track.Name,
-				Artist:  joinArtistText(track.Artists),
-				Album:   track.Album.Name,
-				Seconds: strconv.Itoa(track.Duration),
-				Isrc:    track.ExternalIDs["isrc"],
-			}
+			trackContent := models.FullTrackToContent(track)
 			result = append(result, trackContent)
 		}
 		if len(playlistItemPage.Items) != LIMIT {
@@ -50,10 +42,55 @@ func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id st
 	return result, nil
 }
 
-func joinArtistText(artists []spotify.SimpleArtist) string {
-	text := []string{}
-	for _, a := range artists {
-		text = append(text, a.Name)
+func CreateRemotePlaylist(client *spotify.Client, ctx context.Context, name string) (models.PlaylistContent, error) {
+	user, err := client.CurrentUser(ctx)
+	if err != nil {
+		return models.PlaylistContent{}, fmt.Errorf("failed to get a current user info: %w", err)
 	}
-	return strings.Join(text, ", ")
+	new, err := client.CreatePlaylistForUser(ctx, user.ID, name, "", false, false)
+	if err != nil {
+		return models.PlaylistContent{}, fmt.Errorf("failed to create playlist %s: %w", name, err)
+	}
+	return models.SimplePlaylistToContent(new.SimplePlaylist), nil
+}
+
+type addRemoteTrackRes struct {
+	models.TrackContent
+	IsOk    bool
+	Message string
+}
+
+func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]addRemoteTrackRes, error) {
+	if playlistId == "" {
+		return []addRemoteTrackRes{}, fmt.Errorf("playlistId is empty")
+	}
+
+	result := []addRemoteTrackRes{}
+	trackIds := []spotify.ID{}
+	for _, v := range tracks {
+		if v.Id != "" {
+			result = append(result, addRemoteTrackRes{v, true, ""})
+			trackIds = append(trackIds, spotify.ID(v.Id))
+		} else {
+			// IDがないときは検索する
+			res, err := client.Search(ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
+			if err != nil {
+				return []addRemoteTrackRes{}, fmt.Errorf("failed to search: %w", err)
+			}
+			if len(res.Tracks.Tracks) == 0 {
+				result = append(result, addRemoteTrackRes{v, false, "no search results found"})
+				continue
+			}
+			trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
+			content := models.FullTrackToContent(&res.Tracks.Tracks[0])
+			content.FileName = v.FileName
+			result = append(result, addRemoteTrackRes{content, true, ""})
+		}
+	}
+
+	_, err := client.AddTracksToPlaylist(ctx, spotify.ID(playlistId), trackIds...)
+	if err != nil {
+		return []addRemoteTrackRes{}, err
+	}
+	return result, nil
 }

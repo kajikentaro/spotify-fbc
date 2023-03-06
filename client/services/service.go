@@ -23,6 +23,94 @@ func NewModel(client *spotify.Client, ctx context.Context, rootPath string) mode
 	return model{client: client, ctx: ctx, rootPath: rootPath}
 }
 
+func (m *model) PushPlaylists() error {
+	warnMessage := ""
+
+	// プレイリストの差分を検出
+	diff, err := m.calcDiffPlaylist()
+	if err != nil {
+		return err
+	}
+
+	// 新規追加プレイリストをpushする
+	for _, v := range diff.localOnly {
+		// プレイリストをリモートに作成
+		resPlaylist, err := repositories.CreateRemotePlaylist(m.client, m.ctx, v.DirName)
+		if err != nil {
+			return err
+		}
+		fmt.Println("+", v.DirName)
+
+		// プレイリストファイルをローカルに新規に生成する
+		resPlaylist.DirName = v.DirName
+		repositories.CreatePlaylistContent(m.rootPath, resPlaylist)
+
+		// ローカルの曲を取得
+		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
+		if err != nil {
+			return err
+		}
+
+		// 曲をリモートのプレイリストに追加
+		res, err := repositories.AddRemoteTrack(m.client, m.ctx, resPlaylist.Id, tracks)
+		if err != nil {
+			return err
+		}
+
+		for _, w := range res {
+			if w.IsOk {
+				fmt.Println("  +", w.Name)
+				// 成功した場合はtxtファイルを作り直す
+				err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
+				if err != nil {
+					warnMessage += "failed to remove the old track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
+				}
+				// TODO: uniqueにする
+				w.TrackContent.FileName = replaceBannedCharacter(w.Name)
+				err = repositories.CreateTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
+				if err != nil {
+					warnMessage += "failed to create a new track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
+				}
+			} else {
+				fmt.Println("   ", w.FileName, w.Message)
+			}
+		}
+	}
+
+	for _, v := range diff.remoteOnly {
+		fmt.Println("-", v.Name)
+		tracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, v.Id)
+		if err != nil {
+			return err
+		}
+		for _, w := range tracks {
+			fmt.Println("  -", w.Name)
+		}
+	}
+
+	for _, v := range diff.both {
+		diff, err := m.calcDiffTrack(v)
+		if err != nil {
+			return err
+		}
+		// 差分が0の場合は何も出力しない
+		if len(diff.localOnly) == 0 && len(diff.remoteOnly) == 0 {
+			continue
+		}
+
+		fmt.Println(" ", v.Name)
+
+		for _, w := range diff.localOnly {
+			fmt.Println("  +", w.Name)
+		}
+		for _, w := range diff.remoteOnly {
+			fmt.Println("  -", w.Name)
+		}
+	}
+
+	return nil
+}
+
 func (m *model) ComparePlaylists() error {
 	diff, err := m.calcDiffPlaylist()
 	if err != nil {
@@ -255,19 +343,20 @@ func replaceBannedCharacter(path string) string {
 }
 
 func (m *model) PullPlaylists() error {
-	playlists, err := m.client.CurrentUsersPlaylists(m.ctx)
+	playlists, err := repositories.FetchRemotePlaylistContent(m.client, m.ctx)
 	if err != nil {
 		return err
 	}
 	os.Mkdir(m.rootPath, os.ModePerm)
 
 	usedPlaylistName := map[string]struct{}{}
-	for _, v := range playlists.Playlists[:] {
+	for _, v := range playlists {
 		// define a unduplicated directory name
 		name := replaceBannedCharacter(v.Name)
 		uniqueName := unique(&usedPlaylistName, name)
+		v.DirName = uniqueName
 
-		err := m.CreatePlaylistDirectory(models.PlaylistContent{Id: v.ID.String(), Name: v.Name, DirName: uniqueName})
+		err := m.CreatePlaylistDirectory(v)
 		if err != nil {
 			return err
 		}

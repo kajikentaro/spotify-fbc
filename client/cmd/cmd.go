@@ -33,7 +33,9 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(logoutCmd)
 	rootCmd.AddCommand(compareCmd)
+	rootCmd.AddCommand(pushCmd)
 }
 
 var rootCmd = &cobra.Command{
@@ -43,17 +45,42 @@ var rootCmd = &cobra.Command{
   Edit your playlists by moving directories and file locations`,
 }
 
+var pushCmd = &cobra.Command{
+	Use:   "push",
+	Short: "TODO",
+	Long:  `TODO`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		client, _ := genClient(ctx)
+		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		if err := model.PushPlaylists(); err != nil {
+			log.Fatalf(err.Error())
+		}
+	},
+}
+
 var compareCmd = &cobra.Command{
 	Use:   "compare",
 	Short: "TODO",
 	Long:  `login`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client := genClient(ctx)
+		client, _ := genClient(ctx)
 		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		if err := model.ComparePlaylists(); err != nil {
 			log.Fatalf(err.Error())
 		}
+	},
+}
+
+var logoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "TODO",
+	Long:  `TODO`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		_, login := genClient(ctx)
+		login.RemoveCache()
 	},
 }
 
@@ -82,7 +109,7 @@ var pullCmd = &cobra.Command{
 	Long:  `TODO`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client := genClient(ctx)
+		client, _ := genClient(ctx)
 		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		if err := model.PullPlaylists(); err != nil {
 			log.Fatalf(err.Error())
@@ -90,14 +117,14 @@ var pullCmd = &cobra.Command{
 	},
 }
 
-func genClient(ctx context.Context) *spotify.Client {
+func genClient(ctx context.Context) (*spotify.Client, logins.Login) {
 	var redirectURI = "http://localhost:8080/callback"
 	/* set up variables */
 	clientID := os.Getenv("CLIENT_ID")
 	clientSecret := os.Getenv("CLIENT_SECRET")
 	auth := spotifyauth.New(
 		spotifyauth.WithRedirectURL(redirectURI),
-		spotifyauth.WithScopes(spotifyauth.ScopeUserReadPrivate),
+		spotifyauth.WithScopes(spotifyauth.ScopePlaylistReadPrivate, spotifyauth.ScopePlaylistReadCollaborative, spotifyauth.ScopePlaylistModifyPrivate),
 		spotifyauth.WithClientID(clientID),
 		spotifyauth.WithClientSecret(clientSecret),
 	)
@@ -128,5 +155,5 @@ func genClient(ctx context.Context) *spotify.Client {
 		}
 	}
 	client := login.GetClient(token)
-	return client
+	return client, login
 }

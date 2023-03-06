@@ -1,6 +1,7 @@
 package logins
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,23 +15,24 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type login struct {
+type Login struct {
 	ctx  context.Context
 	auth *spotifyauth.Authenticator
 }
 
-func NewLogin(ctx context.Context, auth *spotifyauth.Authenticator) login {
-	return login{ctx: ctx, auth: auth}
+func NewLogin(ctx context.Context, auth *spotifyauth.Authenticator) Login {
+	return Login{ctx: ctx, auth: auth}
 }
 
-func (l *login) Login() (*oauth2.Token, error) {
+func (l *Login) Login() (*oauth2.Token, error) {
 	state := getRandomStr()
 	url := l.auth.AuthURL(state)
 	fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
 
-	var code string
 	fmt.Println("Please enter your code:")
-	fmt.Scan(&code)
+	scanner := bufio.NewScanner(os.Stdin) // 標準入力を受け付けるスキャナ
+	scanner.Scan()                        // １行分の入力を取得する
+	code := scanner.Text()
 
 	token, err := l.auth.Exchange(l.ctx, code)
 	if err != nil {
@@ -40,13 +42,13 @@ func (l *login) Login() (*oauth2.Token, error) {
 	return token, nil
 }
 
-func (l *login) GetClient(token *oauth2.Token) *spotify.Client {
+func (l *Login) GetClient(token *oauth2.Token) *spotify.Client {
 	httpClient := l.auth.Client(l.ctx, token)
 	client := spotify.New(httpClient)
 	return client
 }
 
-func (l *login) SaveCache(token *oauth2.Token) error {
+func (l *Login) SaveCache(token *oauth2.Token) error {
 	data, err := json.Marshal(token)
 	if err != nil {
 		return err
@@ -65,7 +67,21 @@ func (l *login) SaveCache(token *oauth2.Token) error {
 	return nil
 }
 
-func (l *login) IsCacheExist() bool {
+func (l *Login) RemoveCache() error {
+	cachePath, err := l.GetCachePath()
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(cachePath)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *Login) IsCacheExist() bool {
 	cachePath, err := l.GetCachePath()
 	if err != nil {
 		return false
@@ -82,7 +98,7 @@ func (l *login) IsCacheExist() bool {
 	}
 }
 
-func (l *login) ReadCache() (*oauth2.Token, error) {
+func (l *Login) ReadCache() (*oauth2.Token, error) {
 	cachePath, err := l.GetCachePath()
 	if err != nil {
 		return nil, err
@@ -102,7 +118,7 @@ func (l *login) ReadCache() (*oauth2.Token, error) {
 	return &token, nil
 }
 
-func (l *login) GetCachePath() (string, error) {
+func (l *Login) GetCachePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

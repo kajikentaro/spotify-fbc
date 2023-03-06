@@ -109,12 +109,22 @@ func CreatePlaylistDirectory(rootPath string, playlist models.PlaylistContent) e
 	return nil
 }
 
+// TODO rootPath と dirNameを引数にするように
 func CreateTrackContent(dirPath string, track models.TrackContent) error {
 	textContent := track.Marshal()
-	filePath := filepath.Join(dirPath, track.FileName)
+	filePath := filepath.Join(dirPath, track.FileName+".txt")
 	err := os.WriteFile(filePath, []byte(textContent), 0666)
 	if err != nil {
 		return fmt.Errorf("failed to create %s", filePath)
+	}
+	return nil
+}
+
+func RemoveTrackContent(dirPath string, track models.TrackContent) error {
+	filePath := filepath.Join(dirPath, track.FileName)
+	err := os.Remove(filePath)
+	if err != nil {
+		return err
 	}
 	return nil
 }
