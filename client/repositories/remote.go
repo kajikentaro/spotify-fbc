@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -9,9 +8,9 @@ import (
 	"github.com/zmb3/spotify/v2"
 )
 
-func FetchRemotePlaylistContent(client *spotify.Client, ctx context.Context) ([]models.PlaylistContent, error) {
+func (r *Repository) FetchRemotePlaylistContent() ([]models.PlaylistContent, error) {
 	result := []models.PlaylistContent{}
-	playlists, err := client.CurrentUsersPlaylists(ctx)
+	playlists, err := r.client.CurrentUsersPlaylists(r.ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -23,11 +22,11 @@ func FetchRemotePlaylistContent(client *spotify.Client, ctx context.Context) ([]
 	return result, nil
 }
 
-func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id string) ([]models.TrackContent, error) {
+func (r *Repository) FetchRemotePlaylistTrack(id string) ([]models.TrackContent, error) {
 	LIMIT := 100
 	result := []models.TrackContent{}
 	for offset := 0; true; offset += LIMIT {
-		playlistItemPage, err := client.GetPlaylistItems(ctx, spotify.ID(id), spotify.Limit(LIMIT), spotify.Offset(offset))
+		playlistItemPage, err := r.client.GetPlaylistItems(r.ctx, spotify.ID(id), spotify.Limit(LIMIT), spotify.Offset(offset))
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch playlist %s: %s", id, err)
 		}
@@ -43,12 +42,12 @@ func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id st
 	return result, nil
 }
 
-func CreateRemotePlaylist(client *spotify.Client, ctx context.Context, name string) (models.PlaylistContent, error) {
-	user, err := client.CurrentUser(ctx)
+func (r *Repository) CreateRemotePlaylist(name string) (models.PlaylistContent, error) {
+	user, err := r.client.CurrentUser(r.ctx)
 	if err != nil {
 		return models.PlaylistContent{}, fmt.Errorf("failed to get a current user info: %w", err)
 	}
-	new, err := client.CreatePlaylistForUser(ctx, user.ID, name, "", false, false)
+	new, err := r.client.CreatePlaylistForUser(r.ctx, user.ID, name, "", false, false)
 	if err != nil {
 		return models.PlaylistContent{}, fmt.Errorf("failed to create playlist %s: %w", name, err)
 	}
@@ -61,7 +60,7 @@ type EditTrackRes struct {
 	Message string
 }
 
-func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]EditTrackRes, error) {
+func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackContent) ([]EditTrackRes, error) {
 	if playlistId == "" {
 		return []EditTrackRes{}, fmt.Errorf("playlistId is empty")
 	}
@@ -74,7 +73,7 @@ func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId stri
 			trackIds = append(trackIds, spotify.ID(v.Id))
 		} else {
 			// IDがないときは検索する
-			res, err := client.Search(ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
+			res, err := r.client.Search(r.ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
 			if err != nil {
 				return []EditTrackRes{}, fmt.Errorf("failed to search: %w", err)
 			}
@@ -104,7 +103,7 @@ func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId stri
 		} else {
 			trackChunk = trackIds[offset:]
 		}
-		_, err := client.AddTracksToPlaylist(ctx, spotify.ID(playlistId), trackChunk...)
+		_, err := r.client.AddTracksToPlaylist(r.ctx, spotify.ID(playlistId), trackChunk...)
 		if err != nil {
 			return []EditTrackRes{}, err
 		}
@@ -112,7 +111,7 @@ func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId stri
 	return result, nil
 }
 
-func RemoveRemoteTrack(client *spotify.Client, ctx context.Context, playlist models.PlaylistContent, tracks []models.TrackContent) error {
+func (r *Repository) RemoveRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {
 	if playlist.Id == "" {
 		return errors.New("playlist id is empty")
 	}
@@ -125,7 +124,7 @@ func RemoveRemoteTrack(client *spotify.Client, ctx context.Context, playlist mod
 		trackIds = append(trackIds, spotify.ID(v.Id))
 	}
 
-	_, err := client.RemoveTracksFromPlaylist(ctx, spotify.ID(playlist.Id), trackIds...)
+	_, err := r.client.RemoveTracksFromPlaylist(r.ctx, spotify.ID(playlist.Id), trackIds...)
 	if err != nil {
 		return err
 	}
@@ -133,11 +132,11 @@ func RemoveRemoteTrack(client *spotify.Client, ctx context.Context, playlist mod
 	return nil
 }
 
-func RemoveRemotePlaylist(client *spotify.Client, ctx context.Context, playlist models.PlaylistContent) error {
+func (r *Repository) RemoveRemotePlaylist(playlist models.PlaylistContent) error {
 	if playlist.Id == "" {
 		return errors.New("playlist id is empty")
 	}
-	err := client.UnfollowPlaylist(ctx, spotify.ID(playlist.Id))
+	err := r.client.UnfollowPlaylist(r.ctx, spotify.ID(playlist.Id))
 	if err != nil {
 		return err
 	}

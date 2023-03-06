@@ -49,7 +49,10 @@ var cleanCmd = &cobra.Command{
 	Short: "clean up unused playlist entity txt",
 	Long:  `clean up unused playlist entity txt`,
 	Run: func(cmd *cobra.Command, args []string) {
-		deleted, err := repositories.CleanUpPlaylistContent(SPOTIFY_PLAYLIST_ROOT)
+		ctx := context.Background()
+		client, _ := genClient(ctx)
+		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		deleted, err := repository.CleanUpPlaylistContent()
 		for d := range deleted {
 			log.Println(d, "was deleted.")
 		}
@@ -74,7 +77,8 @@ var pushCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := genClient(ctx)
-		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		model := services.NewModel(repository)
 		if err := model.PushPlaylists(); err != nil {
 			log.Fatalf(err.Error())
 		}
@@ -88,7 +92,8 @@ var compareCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := genClient(ctx)
-		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		model := services.NewModel(repository)
 		if err := model.ComparePlaylists(); err != nil {
 			log.Fatalf(err.Error())
 		}
@@ -132,7 +137,8 @@ var pullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := genClient(ctx)
-		model := services.NewModel(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		model := services.NewModel(repository)
 		if err := model.PullPlaylists(); err != nil {
 			log.Fatalf(err.Error())
 		}

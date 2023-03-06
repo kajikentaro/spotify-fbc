@@ -11,8 +11,8 @@ import (
 )
 
 // ローカルのプレイリスト情報txtファイルを読み込み
-func FetchLocalPlaylistContent(rootPath string) ([]models.PlaylistContent, error) {
-	entries, err := os.ReadDir(rootPath)
+func (r *Repository) FetchLocalPlaylistContent() ([]models.PlaylistContent, error) {
+	entries, err := os.ReadDir(r.rootPath)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func FetchLocalPlaylistContent(rootPath string) ([]models.PlaylistContent, error
 		}
 
 		// .txtで終わる名前のファイルの場合
-		b, err := os.ReadFile(filepath.Join(rootPath, v.Name()))
+		b, err := os.ReadFile(filepath.Join(r.rootPath, v.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("cannot read %s: %w", v.Name(), err)
 		}
@@ -37,8 +37,8 @@ func FetchLocalPlaylistContent(rootPath string) ([]models.PlaylistContent, error
 }
 
 // ローカルのディレクトリ一覧を読み込み
-func FetchLocalPlaylistDir(rootPath string) ([]string, error) {
-	entries, err := os.ReadDir(rootPath)
+func (r *Repository) FetchLocalPlaylistDir() ([]string, error) {
+	entries, err := os.ReadDir(r.rootPath)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,8 @@ func FetchLocalPlaylistDir(rootPath string) ([]string, error) {
 	return result, nil
 }
 
-func FetchLocalPlaylistTrack(dirPath string) ([]models.TrackContent, error) {
+func (r *Repository) FetchLocalPlaylistTrack(dirName string) ([]models.TrackContent, error) {
+	dirPath := filepath.Join(r.rootPath, dirName)
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory '%s': %w", dirPath, err)
@@ -87,9 +88,9 @@ func FetchLocalPlaylistTrack(dirPath string) ([]models.TrackContent, error) {
 }
 
 // ローカルのプレイリスト情報txtファイルを生成
-func CreatePlaylistContent(rootPath string, playlist models.PlaylistContent) error {
+func (r *Repository) CreatePlaylistContent(playlist models.PlaylistContent) error {
 	textContent := playlist.Marshal()
-	filePath := filepath.Join(rootPath, playlist.DirName+".txt")
+	filePath := filepath.Join(r.rootPath, playlist.DirName+".txt")
 	err := os.WriteFile(filePath, []byte(textContent), 0666)
 	if err != nil {
 		return fmt.Errorf("failed to create %s", filePath)
@@ -98,8 +99,8 @@ func CreatePlaylistContent(rootPath string, playlist models.PlaylistContent) err
 }
 
 // ローカルのプレイリスト用ディレクトリを作成
-func CreatePlaylistDirectory(rootPath string, playlist models.PlaylistContent) error {
-	dirPath := filepath.Join(rootPath, playlist.DirName)
+func (r *Repository) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
+	dirPath := filepath.Join(r.rootPath, playlist.DirName)
 	err := os.Mkdir(dirPath, os.ModePerm)
 	if os.IsExist(err) {
 		log.Println(playlist.Name, "is already created")
@@ -110,7 +111,8 @@ func CreatePlaylistDirectory(rootPath string, playlist models.PlaylistContent) e
 }
 
 // TODO rootPath と dirNameを引数にするように
-func CreateTrackContent(dirPath string, track models.TrackContent) error {
+func (r *Repository) CreateTrackContent(dirName string, track models.TrackContent) error {
+	dirPath := filepath.Join(r.rootPath, dirName)
 	textContent := track.Marshal()
 	filePath := filepath.Join(dirPath, track.FileName)
 	err := os.WriteFile(filePath, []byte(textContent), 0666)
@@ -120,8 +122,8 @@ func CreateTrackContent(dirPath string, track models.TrackContent) error {
 	return nil
 }
 
-func RemoveTrackContent(dirPath string, track models.TrackContent) error {
-	filePath := filepath.Join(dirPath, track.FileName)
+func (r *Repository) RemoveTrackContent(dirName string, track models.TrackContent) error {
+	filePath := filepath.Join(r.rootPath, dirName, track.FileName)
 	err := os.Remove(filePath)
 	if err != nil {
 		return err
@@ -130,12 +132,12 @@ func RemoveTrackContent(dirPath string, track models.TrackContent) error {
 }
 
 // 不要なプレイリスト情報txtファイルを消去する
-func CleanUpPlaylistContent(rootPath string) ([]string, error) {
-	dirs, err := FetchLocalPlaylistDir(rootPath)
+func (r *Repository) CleanUpPlaylistContent() ([]string, error) {
+	dirs, err := r.FetchLocalPlaylistDir()
 	if err != nil {
 		return nil, err
 	}
-	contents, err := FetchLocalPlaylistContent(rootPath)
+	contents, err := r.FetchLocalPlaylistContent()
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +154,7 @@ func CleanUpPlaylistContent(rootPath string) ([]string, error) {
 	deletedFiles := []string{}
 	for dirName, isUsed := range txtIsUsed {
 		if !isUsed {
-			fName := filepath.Join(rootPath, dirName+".txt")
+			fName := filepath.Join(r.rootPath, dirName+".txt")
 			err := os.Remove(fName)
 			if err != nil {
 				return deletedFiles, fmt.Errorf("failed to remove the unused playlist content '%s': %w", fName, err)
@@ -161,4 +163,12 @@ func CleanUpPlaylistContent(rootPath string) ([]string, error) {
 		}
 	}
 	return deletedFiles, nil
+}
+
+func (r Repository) CreateRootDir() error {
+	err := os.Mkdir(r.rootPath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	return nil
 }

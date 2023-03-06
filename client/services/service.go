@@ -1,27 +1,22 @@
 package services
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
 	"github.com/kajikentaro/spotify-file-based-client/client/repositories"
-	"github.com/zmb3/spotify/v2"
 )
 
 type model struct {
-	client   *spotify.Client
-	ctx      context.Context
-	rootPath string
+	repository *repositories.Repository
 }
 
-func NewModel(client *spotify.Client, ctx context.Context, rootPath string) model {
-	return model{client: client, ctx: ctx, rootPath: rootPath}
+func NewModel(repository *repositories.Repository) model {
+	return model{repository: repository}
 }
 
 func getFileStem(fileName string) (string, error) {
@@ -48,7 +43,7 @@ func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []reposito
 			/* 成功した場合は楽曲txtを作り直す */
 
 			// 削除
-			err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, playlist.DirName), w.TrackContent)
+			err := m.repository.RemoveTrackContent(playlist.DirName, w.TrackContent)
 			if err != nil {
 				// 削除に失敗した場合
 				fmt.Println("failed to remove the old track content: ", filepath.Join(playlist.DirName, w.TrackContent.FileName))
@@ -60,7 +55,7 @@ func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []reposito
 			// 作成
 			stemName := replaceBannedCharacter(w.Name)
 			w.FileName = unique(&usedFileStem, stemName) + ".txt"
-			err = repositories.CreateTrackContent(filepath.Join(m.rootPath, playlist.DirName), w.TrackContent)
+			err = m.repository.CreateTrackContent(playlist.DirName, w.TrackContent)
 			if err != nil {
 				fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
 			}
@@ -80,7 +75,7 @@ func (m *model) PushPlaylists() error {
 	// 新規追加プレイリストをpushする
 	for _, v := range diff.localOnly {
 		// プレイリストをリモートに作成
-		resPlaylist, err := repositories.CreateRemotePlaylist(m.client, m.ctx, v.DirName)
+		resPlaylist, err := m.repository.CreateRemotePlaylist(v.DirName)
 		if err != nil {
 			return err
 		}
@@ -88,16 +83,16 @@ func (m *model) PushPlaylists() error {
 
 		// プレイリストファイルをローカルに新規に生成する
 		resPlaylist.DirName = v.DirName
-		repositories.CreatePlaylistContent(m.rootPath, resPlaylist)
+		m.repository.CreatePlaylistContent(resPlaylist)
 
 		// ローカルの曲を取得
-		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
+		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
 		if err != nil {
 			return err
 		}
 
 		// 曲をリモートのプレイリストに追加
-		res, err := repositories.AddRemoteTrack(m.client, m.ctx, resPlaylist.Id, tracks)
+		res, err := m.repository.AddRemoteTrack(resPlaylist.Id, tracks)
 		if err != nil {
 			return err
 		}
@@ -107,7 +102,7 @@ func (m *model) PushPlaylists() error {
 
 	for _, v := range diff.remoteOnly {
 		// プレイリストをリモートから削除
-		err := repositories.RemoveRemotePlaylist(m.client, m.ctx, v)
+		err := m.repository.RemoveRemotePlaylist(v)
 		if err != nil {
 			return err
 		}
@@ -127,7 +122,7 @@ func (m *model) PushPlaylists() error {
 		fmt.Println(" ", v.Name)
 
 		// 曲をリモートのプレイリストに追加
-		res, err := repositories.AddRemoteTrack(m.client, m.ctx, v.Id, diff.localOnly)
+		res, err := m.repository.AddRemoteTrack(v.Id, diff.localOnly)
 		if err != nil {
 			return err
 		}
@@ -135,7 +130,7 @@ func (m *model) PushPlaylists() error {
 		m.recreateTrackTxt(v, res)
 
 		// 曲をリモートのプレイリストから削除
-		err = repositories.RemoveRemoteTrack(m.client, m.ctx, v, diff.remoteOnly)
+		err = m.repository.RemoveRemoteTrack(v, diff.remoteOnly)
 		if err != nil {
 			return err
 		}
@@ -145,7 +140,7 @@ func (m *model) PushPlaylists() error {
 	}
 
 	// 後片付け: 不要なプレイリストテキストを消去
-	deleted, err := repositories.CleanUpPlaylistContent(m.rootPath)
+	deleted, err := m.repository.CleanUpPlaylistContent()
 	for d := range deleted {
 		log.Println(d, "was deleted.")
 	}
@@ -163,7 +158,7 @@ func (m *model) ComparePlaylists() error {
 
 	for _, v := range diff.localOnly {
 		fmt.Println("+", v.DirName)
-		tracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, v.DirName))
+		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
 		if err != nil {
 			return err
 		}
@@ -207,7 +202,7 @@ type diffPlaylist struct {
 
 func (m *model) calcDiffPlaylist() (diffPlaylist, error) {
 	// プレイリスト情報のテキストファイル読み込み
-	playlistContents, err := repositories.FetchLocalPlaylistContent(m.rootPath)
+	playlistContents, err := m.repository.FetchLocalPlaylistContent()
 	if err != nil {
 		return diffPlaylist{}, err
 	}
@@ -218,7 +213,7 @@ func (m *model) calcDiffPlaylist() (diffPlaylist, error) {
 	}
 
 	// ディレクトリの一覧を取得
-	dirs, err := repositories.FetchLocalPlaylistDir(m.rootPath)
+	dirs, err := m.repository.FetchLocalPlaylistDir()
 	if err != nil {
 		return diffPlaylist{}, err
 	}
@@ -234,7 +229,7 @@ func (m *model) calcDiffPlaylist() (diffPlaylist, error) {
 	}
 
 	// リモートのプレイリストを配列で取得
-	remotePLs, err := repositories.FetchRemotePlaylistContent(m.client, m.ctx)
+	remotePLs, err := m.repository.FetchRemotePlaylistContent()
 	if err != nil {
 		return diffPlaylist{}, err
 	}
@@ -297,11 +292,11 @@ func (m *model) calcDiffTrack(playlist models.PlaylistContent) (diffTrack, error
 		return diffTrack{}, fmt.Errorf("property Id is empty")
 	}
 
-	localTracks, err := repositories.FetchLocalPlaylistTrack(filepath.Join(m.rootPath, playlist.DirName))
+	localTracks, err := m.repository.FetchLocalPlaylistTrack(playlist.DirName)
 	if err != nil {
 		return diffTrack{}, err
 	}
-	remoteTracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, playlist.Id)
+	remoteTracks, err := m.repository.FetchRemotePlaylistTrack(playlist.Id)
 	if err != nil {
 		return diffTrack{}, err
 	}
@@ -348,18 +343,18 @@ func (m *model) calcDiffTrack(playlist models.PlaylistContent) (diffTrack, error
 
 func (m *model) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
 	// generate a playlist detail file
-	err := repositories.CreatePlaylistContent(m.rootPath, playlist)
+	err := m.repository.CreatePlaylistContent(playlist)
 	if err != nil {
 		return err
 	}
 
 	// generate a playlist directory
-	err = repositories.CreatePlaylistDirectory(m.rootPath, playlist)
+	err = m.repository.CreatePlaylistDirectory(playlist)
 	if err != nil {
 		return err
 	}
 
-	playlistTrack, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, playlist.Id)
+	playlistTrack, err := m.repository.FetchRemotePlaylistTrack(playlist.Id)
 	if err != nil {
 		return err
 	}
@@ -369,7 +364,7 @@ func (m *model) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
 	for _, track := range playlistTrack {
 		fileStem := replaceBannedCharacter(track.Name)
 		track.FileName = unique(&usedTrackNames, fileStem) + ".txt"
-		repositories.CreateTrackContent(filepath.Join(m.rootPath, playlist.DirName), track)
+		m.repository.CreateTrackContent(playlist.DirName, track)
 	}
 	return nil
 }
@@ -380,11 +375,13 @@ func replaceBannedCharacter(path string) string {
 }
 
 func (m *model) PullPlaylists() error {
-	playlists, err := repositories.FetchRemotePlaylistContent(m.client, m.ctx)
+	playlists, err := m.repository.FetchRemotePlaylistContent()
 	if err != nil {
 		return err
 	}
-	os.Mkdir(m.rootPath, os.ModePerm)
+	if err := m.repository.CreateRootDir(); err != nil {
+		return err
+	}
 
 	usedPlaylistName := map[string]struct{}{}
 	for _, v := range playlists {
