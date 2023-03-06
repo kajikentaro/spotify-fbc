@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
 	"github.com/kajikentaro/spotify-file-based-client/client/repositories"
+	"github.com/kajikentaro/spotify-file-based-client/client/services/uniques"
 )
 
 type model struct {
@@ -33,10 +33,10 @@ func getFileStem(fileName string) (string, error) {
 func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []repositories.EditTrackRes) {
 
 	// 現在存在する楽曲txtの一覧を作成
-	usedFileStem := map[string]struct{}{}
+	usedFileStem := uniques.NewUnique()
 	for _, w := range res {
 		fileStem, _ := getFileStem(w.FileName)
-		usedFileStem[fileStem] = struct{}{}
+		usedFileStem.Add(fileStem)
 	}
 
 	for _, w := range res {
@@ -52,11 +52,11 @@ func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []reposito
 				continue
 			}
 			fileStem, _ := getFileStem(w.FileName)
-			delete(usedFileStem, fileStem)
+			usedFileStem.Delete(fileStem)
 
 			// 作成
 			stemName := replaceBannedCharacter(w.Name)
-			w.FileName = unique(&usedFileStem, stemName) + ".txt"
+			w.FileName = usedFileStem.Take(stemName) + ".txt"
 			err = m.repository.CreateTrackContent(playlist.DirName, w.TrackContent)
 			if err != nil {
 				fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
@@ -362,10 +362,10 @@ func (m *model) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
 	}
 
 	// generate a track file in the directory
-	usedTrackNames := map[string]struct{}{}
+	usedTrackNames := uniques.NewUnique()
 	for _, track := range playlistTrack {
 		fileStem := replaceBannedCharacter(track.Name)
-		track.FileName = unique(&usedTrackNames, fileStem) + ".txt"
+		track.FileName = usedTrackNames.Take(fileStem) + ".txt"
 		m.repository.CreateTrackContent(playlist.DirName, track)
 	}
 	return nil
@@ -387,11 +387,11 @@ func (m *model) PullPlaylists() error {
 		}
 	}
 
-	usedPlaylistName := map[string]struct{}{}
+	usedPlaylistName := uniques.NewUnique()
 	for _, v := range playlists {
 		// define a unduplicated directory name
 		name := replaceBannedCharacter(v.Name)
-		uniqueName := unique(&usedPlaylistName, name)
+		uniqueName := usedPlaylistName.Take(name)
 		v.DirName = uniqueName
 
 		err := m.CreatePlaylistDirectory(v)
@@ -400,25 +400,4 @@ func (m *model) PullPlaylists() error {
 		}
 	}
 	return nil
-}
-
-// stemNameがすでにusedSetに存在する場合は末尾に連番の数字を足したものを返す
-/* 例:
- * usedSet := map[string]struct{}{}
- * res := unique(usedSet, "hoge")
- * // res is "hoge"
- * res := unique(usedSet, "hoge")
- * // res is "hoge 2"
- */
-func unique(usedSet *map[string]struct{}, stemName string) string {
-	uniqueName := stemName
-	for i := 2; i < 1e7; i++ {
-		if _, isDuplicated := (*usedSet)[uniqueName]; isDuplicated {
-			uniqueName = stemName + " " + strconv.Itoa(i)
-		} else {
-			break
-		}
-	}
-	(*usedSet)[uniqueName] = struct{}{}
-	return uniqueName
 }
