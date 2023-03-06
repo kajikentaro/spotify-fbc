@@ -143,7 +143,7 @@ func (m *model) PushPlaylists() error {
 
 	// 後片付け: 不要なプレイリストテキストを消去
 	deleted, err := m.repository.CleanUpPlaylistContent()
-	for d := range deleted {
+	for _, d := range deleted {
 		log.Println(d, "was deleted.")
 	}
 	if err != nil {
