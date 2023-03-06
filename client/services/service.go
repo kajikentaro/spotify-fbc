@@ -24,9 +24,53 @@ func NewModel(client *spotify.Client, ctx context.Context, rootPath string) mode
 	return model{client: client, ctx: ctx, rootPath: rootPath}
 }
 
-func (m *model) PushPlaylists() error {
-	warnMessage := ""
+func getFileStem(fileName string) (string, error) {
+	r := regexp.MustCompile(`(.*)\.txt$`)
+	fileStem := r.FindStringSubmatch(fileName)
+	if len(fileStem) < 2 {
+		return "", fmt.Errorf("property file_name is invalid. must end with .txt: '%s'", fileName)
+	}
+	return fileStem[1], nil
+}
 
+func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []repositories.EditTrackRes) {
+
+	// 現在存在する楽曲txtの一覧を作成
+	usedFileStem := map[string]struct{}{}
+	for _, w := range res {
+		fileStem, _ := getFileStem(w.FileName)
+		usedFileStem[fileStem] = struct{}{}
+	}
+
+	for _, w := range res {
+		if w.IsOk {
+			fmt.Println("  +", w.Name)
+			/* 成功した場合は楽曲txtを作り直す */
+
+			// 削除
+			err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, playlist.DirName), w.TrackContent)
+			if err != nil {
+				// 削除に失敗した場合
+				fmt.Println("failed to remove the old track content: ", filepath.Join(playlist.DirName, w.TrackContent.FileName))
+				continue
+			}
+			fileStem, _ := getFileStem(w.FileName)
+			delete(usedFileStem, fileStem)
+
+			// 作成
+			stemName := replaceBannedCharacter(w.Name)
+			w.FileName = unique(&usedFileStem, stemName) + ".txt"
+			err = repositories.CreateTrackContent(filepath.Join(m.rootPath, playlist.DirName), w.TrackContent)
+			if err != nil {
+				fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
+			}
+		} else {
+			fmt.Println("   ", w.FileName, w.Message)
+		}
+	}
+}
+
+func (m *model) PushPlaylists() error {
 	// プレイリストの差分を検出
 	diff, err := m.calcDiffPlaylist()
 	if err != nil {
@@ -57,25 +101,8 @@ func (m *model) PushPlaylists() error {
 		if err != nil {
 			return err
 		}
-
-		for _, w := range res {
-			if w.IsOk {
-				fmt.Println("  +", w.Name)
-				// 成功した場合はtxtファイルを作り直す
-				err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
-				if err != nil {
-					warnMessage += "failed to remove the old track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
-				}
-				// TODO: uniqueにする
-				w.TrackContent.FileName = replaceBannedCharacter(w.Name) + ".txt"
-				err = repositories.CreateTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
-				if err != nil {
-					warnMessage += "failed to create a new track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
-				}
-			} else {
-				fmt.Println("   ", w.FileName, w.Message)
-			}
-		}
+		// 楽曲txtを作り直す
+		m.recreateTrackTxt(v, res)
 	}
 
 	for _, v := range diff.remoteOnly {
@@ -104,24 +131,8 @@ func (m *model) PushPlaylists() error {
 		if err != nil {
 			return err
 		}
-		for _, w := range res {
-			if w.IsOk {
-				fmt.Println("  +", w.Name)
-				// 成功した場合はtxtファイルを作り直す
-				err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
-				if err != nil {
-					warnMessage += "failed to remove the old track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
-				}
-				// TODO: uniqueにする
-				w.TrackContent.FileName = replaceBannedCharacter(w.Name) + ".txt"
-				err = repositories.CreateTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
-				if err != nil {
-					warnMessage += "failed to create a new track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
-				}
-			} else {
-				fmt.Println("   ", w.FileName, w.Message)
-			}
-		}
+		// 楽曲txtを作り直す
+		m.recreateTrackTxt(v, res)
 
 		// 曲をリモートのプレイリストから削除
 		err = repositories.RemoveRemoteTrack(m.client, m.ctx, v, diff.remoteOnly)
@@ -133,9 +144,7 @@ func (m *model) PushPlaylists() error {
 		}
 	}
 
-	fmt.Println(warnMessage)
-
-	// 後片付け.不要なプレイリストテキストを消去
+	// 後片付け: 不要なプレイリストテキストを消去
 	deleted, err := repositories.CleanUpPlaylistContent(m.rootPath)
 	for d := range deleted {
 		log.Println(d, "was deleted.")

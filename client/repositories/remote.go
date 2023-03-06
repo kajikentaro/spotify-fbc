@@ -55,37 +55,37 @@ func CreateRemotePlaylist(client *spotify.Client, ctx context.Context, name stri
 	return models.SimplePlaylistToContent(new.SimplePlaylist), nil
 }
 
-type editTrackRes struct {
+type EditTrackRes struct {
 	models.TrackContent
 	IsOk    bool
 	Message string
 }
 
-func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]editTrackRes, error) {
+func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]EditTrackRes, error) {
 	if playlistId == "" {
-		return []editTrackRes{}, fmt.Errorf("playlistId is empty")
+		return []EditTrackRes{}, fmt.Errorf("playlistId is empty")
 	}
 
-	result := []editTrackRes{}
+	result := []EditTrackRes{}
 	trackIds := []spotify.ID{}
 	for _, v := range tracks {
 		if v.Id != "" {
-			result = append(result, editTrackRes{v, true, ""})
+			result = append(result, EditTrackRes{v, true, ""})
 			trackIds = append(trackIds, spotify.ID(v.Id))
 		} else {
 			// IDがないときは検索する
 			res, err := client.Search(ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
 			if err != nil {
-				return []editTrackRes{}, fmt.Errorf("failed to search: %w", err)
+				return []EditTrackRes{}, fmt.Errorf("failed to search: %w", err)
 			}
 			if len(res.Tracks.Tracks) == 0 {
-				result = append(result, editTrackRes{v, false, "no search results found"})
+				result = append(result, EditTrackRes{v, false, "no search results found"})
 				continue
 			}
 			trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
 			content := models.FullTrackToContent(&res.Tracks.Tracks[0])
 			content.FileName = v.FileName
-			result = append(result, editTrackRes{content, true, ""})
+			result = append(result, EditTrackRes{content, true, ""})
 		}
 	}
 	if len(trackIds) == 0 {
@@ -106,7 +106,7 @@ func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId stri
 		}
 		_, err := client.AddTracksToPlaylist(ctx, spotify.ID(playlistId), trackChunk...)
 		if err != nil {
-			return []editTrackRes{}, err
+			return []EditTrackRes{}, err
 		}
 	}
 	return result, nil
