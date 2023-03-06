@@ -68,27 +68,58 @@ func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackCont
 
 	result := []EditTrackRes{}
 	trackIds := []spotify.ID{}
+
+	// IDが存在するものから先に処理
+	unconfirmedIds := []spotify.ID{}
+	unconfirmedIdTracks := []models.TrackContent{} // ログ用
+	for _, v := range tracks {
+		if v.Id == "" {
+			continue
+		}
+		unconfirmedIds = append(unconfirmedIds, spotify.ID(v.Id))
+		unconfirmedIdTracks = append(unconfirmedIdTracks, v)
+	}
+	if len(unconfirmedIds) > 0 {
+		confirmedTrack, err := r.client.GetTracks(r.ctx, unconfirmedIds)
+		if err != nil {
+			// 失敗したときはIDが存在するすべてのトラックをエラーにする
+			for _, w := range unconfirmedIdTracks {
+				result = append(result, EditTrackRes{w, false, "failed to search track: " + err.Error()})
+			}
+		} else {
+			for idx, w := range confirmedTrack {
+				if w == nil {
+					result = append(result, EditTrackRes{unconfirmedIdTracks[idx], false, "no search results found"})
+					continue
+				}
+				newTrack := models.FullTrackToContent(w)
+				newTrack.FileName = unconfirmedIdTracks[idx].FileName
+				result = append(result, EditTrackRes{newTrack, true, ""})
+				trackIds = append(trackIds, w.ID)
+			}
+		}
+	}
+
 	for _, v := range tracks {
 		if v.Id != "" {
-			result = append(result, EditTrackRes{v, true, ""})
-			trackIds = append(trackIds, spotify.ID(v.Id))
-		} else {
-			// IDがないときは検索する
-			res, err := r.client.Search(r.ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
-			// 30秒ごとのaccess limitがあるので1秒待機する
-			time.Sleep(time.Second * 1)
-			if err != nil {
-				return []EditTrackRes{}, fmt.Errorf("failed to search: %w", err)
-			}
-			if len(res.Tracks.Tracks) == 0 {
-				result = append(result, EditTrackRes{v, false, "no search results found"})
-				continue
-			}
-			trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
-			content := models.FullTrackToContent(&res.Tracks.Tracks[0])
-			content.FileName = v.FileName
-			result = append(result, EditTrackRes{content, true, ""})
+			continue
 		}
+		// IDがないときは検索する
+		res, err := r.client.Search(r.ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
+		// 30秒ごとのaccess limitがあるので1秒待機する
+		time.Sleep(time.Second * 1)
+		if err != nil {
+			result = append(result, EditTrackRes{v, false, "failed to search: " + err.Error()})
+			continue
+		}
+		if len(res.Tracks.Tracks) == 0 {
+			result = append(result, EditTrackRes{v, false, "no search results found"})
+			continue
+		}
+		trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
+		content := models.FullTrackToContent(&res.Tracks.Tracks[0])
+		content.FileName = v.FileName
+		result = append(result, EditTrackRes{content, true, ""})
 	}
 	if len(trackIds) == 0 {
 		// 検索結果が何も見つからなかった場合
