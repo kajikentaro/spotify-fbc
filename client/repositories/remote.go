@@ -55,47 +55,42 @@ func (r *Repository) CreateRemotePlaylist(name string) (models.PlaylistContent, 
 	return models.SimplePlaylistToContent(new.SimplePlaylist), nil
 }
 
-type EditTrackRes struct {
-	models.TrackContent
-	IsOk    bool
-	Message string
-}
-
-func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackContent) ([]EditTrackRes, error) {
+func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackContent) ([]models.TrackContent, error) {
 	if playlistId == "" {
-		return []EditTrackRes{}, fmt.Errorf("playlistId is empty")
+		return nil, fmt.Errorf("playlistId is empty")
 	}
 
-	result := []EditTrackRes{}
-	trackIds := []spotify.ID{}
+	confirmedIds := []spotify.ID{}
+	confirmedTracks := []models.TrackContent{}
 
 	// IDが存在するものから先に処理
-	unconfirmedIds := []spotify.ID{}
-	unconfirmedIdTracks := []models.TrackContent{} // ログ用
+	inputIds := []spotify.ID{}
+	inputTracks := []models.TrackContent{} // ログ用
 	for _, v := range tracks {
 		if v.Id == "" {
 			continue
 		}
-		unconfirmedIds = append(unconfirmedIds, spotify.ID(v.Id))
-		unconfirmedIdTracks = append(unconfirmedIdTracks, v)
+		inputIds = append(inputIds, spotify.ID(v.Id))
+		inputTracks = append(inputTracks, v)
 	}
-	if len(unconfirmedIds) > 0 {
-		confirmedTrack, err := r.client.GetTracks(r.ctx, unconfirmedIds)
+	if len(inputIds) > 0 {
+		result, err := r.client.GetTracks(r.ctx, inputIds)
 		if err != nil {
 			// 失敗したときはIDが存在するすべてのトラックをエラーにする
-			for _, w := range unconfirmedIdTracks {
-				result = append(result, EditTrackRes{w, false, "failed to search track: " + err.Error()})
+			for _, w := range inputTracks {
+				fmt.Println(w.FileName, "failed to search track: ", err.Error())
 			}
 		} else {
-			for idx, w := range confirmedTrack {
+			for idx, w := range result {
 				if w == nil {
-					result = append(result, EditTrackRes{unconfirmedIdTracks[idx], false, "no search results found"})
+					fmt.Println(inputTracks[idx].FileName, "no search result found", err.Error())
 					continue
 				}
-				newTrack := models.FullTrackToContent(w)
-				newTrack.FileName = unconfirmedIdTracks[idx].FileName
-				result = append(result, EditTrackRes{newTrack, true, ""})
-				trackIds = append(trackIds, w.ID)
+				t := models.FullTrackToContent(w)
+				t.FileName = inputTracks[idx].FileName
+				confirmedIds = append(confirmedIds, spotify.ID(t.Id))
+				confirmedTracks = append(confirmedTracks, t)
+				fmt.Println(t.Name, "was found")
 			}
 		}
 	}
@@ -109,40 +104,52 @@ func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackCont
 		// 30秒ごとのaccess limitがあるので1秒待機する
 		time.Sleep(time.Second * 1)
 		if err != nil {
-			result = append(result, EditTrackRes{v, false, "failed to search: " + err.Error()})
+			fmt.Println(v.FileName, "failed to search track: ", err.Error())
 			continue
 		}
 		if len(res.Tracks.Tracks) == 0 {
-			result = append(result, EditTrackRes{v, false, "no search results found"})
+			fmt.Println(v.FileName, "no search result found", err.Error())
 			continue
 		}
-		trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
-		content := models.FullTrackToContent(&res.Tracks.Tracks[0])
-		content.FileName = v.FileName
-		result = append(result, EditTrackRes{content, true, ""})
+		t := models.FullTrackToContent(&res.Tracks.Tracks[0])
+		t.FileName = v.FileName
+		confirmedIds = append(confirmedIds, spotify.ID(t.Id))
+		confirmedTracks = append(confirmedTracks, t)
+		fmt.Println(t.Name, "was found")
 	}
-	if len(trackIds) == 0 {
+	if len(confirmedIds) == 0 {
 		// 検索結果が何も見つからなかった場合
-		return result, nil
+		return nil, nil
 	}
 
+	_, err := r.client.AddTracksToPlaylist(r.ctx, spotify.ID(playlistId), confirmedIds...)
+	if err != nil {
+		return nil, err
+	}
+	return confirmedTracks, nil
+}
+
+func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackContent, c chan []models.TrackContent) error {
+	// 100個ずつに分割して実行
 	LIMIT := 100
 	for offset := 0; true; offset += LIMIT {
-		if len(trackIds)-1 < offset {
+		if len(tracks)-1 < offset {
 			break
 		}
-		var trackChunk []spotify.ID
-		if offset+LIMIT < len(trackIds) {
-			trackChunk = trackIds[offset : offset+LIMIT]
+		var trackChunk []models.TrackContent
+		if offset+LIMIT < len(tracks) {
+			trackChunk = tracks[offset : offset+LIMIT]
 		} else {
-			trackChunk = trackIds[offset:]
+			trackChunk = tracks[offset:]
 		}
-		_, err := r.client.AddTracksToPlaylist(r.ctx, spotify.ID(playlistId), trackChunk...)
+		doneTracks, err := r.addRemoteTrack(playlistId, trackChunk)
 		if err != nil {
-			return []EditTrackRes{}, err
+			return err
 		}
+		// 実行の途中結果をすぐに返す
+		c <- doneTracks
 	}
-	return result, nil
+	return nil
 }
 
 func (r *Repository) RemoveRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {

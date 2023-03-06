@@ -30,7 +30,7 @@ func getFileStem(fileName string) (string, error) {
 	return fileStem[1], nil
 }
 
-func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []repositories.EditTrackRes) {
+func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []models.TrackContent) {
 
 	// 現在存在する楽曲txtの一覧を作成
 	usedFileStem := uniques.NewUnique()
@@ -40,31 +40,45 @@ func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []reposito
 	}
 
 	for _, w := range res {
-		if w.IsOk {
-			fmt.Println("  +", w.Name)
-			/* 成功した場合は楽曲txtを作り直す */
+		fmt.Println("  +", w.Name)
+		/* 成功した場合は楽曲txtを作り直す */
 
-			// 削除
-			err := m.repository.RemoveTrackContent(playlist.DirName, w.TrackContent)
-			if err != nil {
-				// 削除に失敗した場合
-				fmt.Println("failed to remove the old track content: ", filepath.Join(playlist.DirName, w.TrackContent.FileName))
-				continue
-			}
-			fileStem, _ := getFileStem(w.FileName)
-			usedFileStem.Delete(fileStem)
+		// 削除
+		err := m.repository.RemoveTrackContent(playlist.DirName, w)
+		if err != nil {
+			// 削除に失敗した場合
+			fmt.Println("failed to remove the old track content: ", filepath.Join(playlist.DirName, w.FileName))
+			continue
+		}
+		fileStem, _ := getFileStem(w.FileName)
+		usedFileStem.Delete(fileStem)
 
-			// 作成
-			stemName := replaceBannedCharacter(w.Name)
-			w.FileName = usedFileStem.Take(stemName) + ".txt"
-			err = m.repository.CreateTrackContent(playlist.DirName, w.TrackContent)
-			if err != nil {
-				fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
-			}
-		} else {
-			fmt.Println("   ", w.FileName, w.Message)
+		// 作成
+		stemName := replaceBannedCharacter(w.Name)
+		w.FileName = usedFileStem.Take(stemName) + ".txt"
+		err = m.repository.CreateTrackContent(playlist.DirName, w)
+		if err != nil {
+			fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
 		}
 	}
+}
+
+func (m *model) addRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {
+	// 曲をリモートのプレイリストに追加
+	c := make(chan []models.TrackContent)
+
+	go func() {
+		for cc := range c {
+			// 楽曲txtを作り直す
+			m.recreateTrackTxt(playlist, cc)
+		}
+	}()
+	err := m.repository.AddRemoteTrack(playlist.Id, tracks, c)
+	close(c)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *model) PushPlaylists() error {
@@ -93,13 +107,10 @@ func (m *model) PushPlaylists() error {
 			return err
 		}
 
-		// 曲をリモートのプレイリストに追加
-		res, err := m.repository.AddRemoteTrack(resPlaylist.Id, tracks)
-		if err != nil {
+		// 曲をプレイリストに追加
+		if err := m.addRemoteTrack(resPlaylist, tracks); err != nil {
 			return err
 		}
-		// 楽曲txtを作り直す
-		m.recreateTrackTxt(v, res)
 	}
 
 	for _, v := range diff.remoteOnly {
@@ -123,13 +134,10 @@ func (m *model) PushPlaylists() error {
 		}
 		fmt.Println(" ", v.Name)
 
-		// 曲をリモートのプレイリストに追加
-		res, err := m.repository.AddRemoteTrack(v.Id, diff.localOnly)
-		if err != nil {
+		// 曲をプレイリストに追加
+		if err := m.addRemoteTrack(v, diff.localOnly); err != nil {
 			return err
 		}
-		// 楽曲txtを作り直す
-		m.recreateTrackTxt(v, res)
 
 		// 曲をリモートのプレイリストから削除
 		err = m.repository.RemoveRemoteTrack(v, diff.remoteOnly)
