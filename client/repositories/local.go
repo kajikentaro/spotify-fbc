@@ -31,6 +31,10 @@ func (r *Repository) FetchLocalPlaylistContent() ([]models.PlaylistContent, erro
 			return nil, fmt.Errorf("cannot read %s: %w", v.Name(), err)
 		}
 		p := models.UnmarshalPlaylistContent(string(b))
+		if p.DirName == "" {
+			// おそらくプレイリストtxtではないためスキップ
+			continue
+		}
 		result = append(result, p)
 	}
 	return result, nil
