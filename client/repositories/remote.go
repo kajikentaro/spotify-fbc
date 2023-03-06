@@ -108,7 +108,7 @@ func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackCont
 			continue
 		}
 		if len(res.Tracks.Tracks) == 0 {
-			fmt.Println(v.FileName, "no search result found", err.Error())
+			fmt.Println(v.FileName, "no search result found")
 			continue
 		}
 		t := models.FullTrackToContent(&res.Tracks.Tracks[0])

@@ -30,10 +30,8 @@ func getFileStem(fileName string) (string, error) {
 	return fileStem[1], nil
 }
 
-func (m *model) recreateTrackTxt(playlist models.PlaylistContent, res []models.TrackContent) {
-
+func (m *model) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.PlaylistContent, res []models.TrackContent) {
 	// 現在存在する楽曲txtの一覧を作成
-	usedFileStem := uniques.NewUnique()
 	for _, w := range res {
 		fileStem, _ := getFileStem(w.FileName)
 		usedFileStem.Add(fileStem)
@@ -68,9 +66,10 @@ func (m *model) addRemoteTrack(playlist models.PlaylistContent, tracks []models.
 	c := make(chan []models.TrackContent)
 
 	go func() {
+		usedFileStem := uniques.NewUnique()
 		for cc := range c {
 			// 楽曲txtを作り直す
-			m.recreateTrackTxt(playlist, cc)
+			m.recreateTrackTxt(usedFileStem, playlist, cc)
 		}
 	}()
 	err := m.repository.AddRemoteTrack(playlist.Id, tracks, c)
@@ -194,7 +193,7 @@ func (m *model) ComparePlaylists() error {
 		fmt.Println(" ", v.Name)
 
 		for _, w := range diff.localOnly {
-			fmt.Println("  +", w.Name)
+			fmt.Println("  +", w.FileName)
 		}
 		for _, w := range diff.remoteOnly {
 			fmt.Println("  -", w.Name)
