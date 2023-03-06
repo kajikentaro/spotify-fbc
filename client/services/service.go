@@ -66,7 +66,7 @@ func (m *model) PushPlaylists() error {
 					warnMessage += "failed to remove the old track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
 				}
 				// TODO: uniqueにする
-				w.TrackContent.FileName = replaceBannedCharacter(w.Name)
+				w.TrackContent.FileName = replaceBannedCharacter(w.Name) + ".txt"
 				err = repositories.CreateTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
 				if err != nil {
 					warnMessage += "failed to create a new track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
@@ -78,36 +78,61 @@ func (m *model) PushPlaylists() error {
 	}
 
 	for _, v := range diff.remoteOnly {
-		fmt.Println("-", v.Name)
-		tracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, v.Id)
+		// プレイリストをリモートから削除
+		err := repositories.RemoveRemotePlaylist(m.client, m.ctx, v)
 		if err != nil {
 			return err
 		}
-		for _, w := range tracks {
-			fmt.Println("  -", w.Name)
-		}
+		fmt.Println("-", v.Name)
 	}
 
 	for _, v := range diff.both {
+		// トラックの差分を検出
 		diff, err := m.calcDiffTrack(v)
 		if err != nil {
 			return err
 		}
-		// 差分が0の場合は何も出力しない
+		// 差分が0の場合は何もしない
 		if len(diff.localOnly) == 0 && len(diff.remoteOnly) == 0 {
 			continue
 		}
-
 		fmt.Println(" ", v.Name)
 
-		for _, w := range diff.localOnly {
-			fmt.Println("  +", w.Name)
+		// 曲をリモートのプレイリストに追加
+		res, err := repositories.AddRemoteTrack(m.client, m.ctx, v.Id, diff.localOnly)
+		if err != nil {
+			return err
+		}
+		for _, w := range res {
+			if w.IsOk {
+				fmt.Println("  +", w.Name)
+				// 成功した場合はtxtファイルを作り直す
+				err := repositories.RemoveTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
+				if err != nil {
+					warnMessage += "failed to remove the old track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
+				}
+				// TODO: uniqueにする
+				w.TrackContent.FileName = replaceBannedCharacter(w.Name) + ".txt"
+				err = repositories.CreateTrackContent(filepath.Join(m.rootPath, v.DirName), w.TrackContent)
+				if err != nil {
+					warnMessage += "failed to create a new track content: " + filepath.Join(v.DirName, w.TrackContent.FileName) + "\n"
+				}
+			} else {
+				fmt.Println("   ", w.FileName, w.Message)
+			}
+		}
+
+		// 曲をリモートのプレイリストから削除
+		err = repositories.RemoveRemoteTrack(m.client, m.ctx, v, diff.remoteOnly)
+		if err != nil {
+			return err
 		}
 		for _, w := range diff.remoteOnly {
 			fmt.Println("  -", w.Name)
 		}
 	}
 
+	fmt.Println(warnMessage)
 	return nil
 }
 
@@ -130,13 +155,6 @@ func (m *model) ComparePlaylists() error {
 
 	for _, v := range diff.remoteOnly {
 		fmt.Println("-", v.Name)
-		tracks, err := repositories.FetchRemotePlaylistTrack(m.client, m.ctx, v.Id)
-		if err != nil {
-			return err
-		}
-		for _, w := range tracks {
-			fmt.Println("  -", w.Name)
-		}
 	}
 
 	for _, v := range diff.both {

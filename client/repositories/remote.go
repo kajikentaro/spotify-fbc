@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
@@ -25,7 +26,7 @@ func FetchRemotePlaylistContent(client *spotify.Client, ctx context.Context) ([]
 func FetchRemotePlaylistTrack(client *spotify.Client, ctx context.Context, id string) ([]models.TrackContent, error) {
 	LIMIT := 100
 	result := []models.TrackContent{}
-	for offset := 0; true; offset += 100 {
+	for offset := 0; true; offset += LIMIT {
 		playlistItemPage, err := client.GetPlaylistItems(ctx, spotify.ID(id), spotify.Limit(LIMIT), spotify.Offset(offset))
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch playlist %s: %s", id, err)
@@ -54,43 +55,91 @@ func CreateRemotePlaylist(client *spotify.Client, ctx context.Context, name stri
 	return models.SimplePlaylistToContent(new.SimplePlaylist), nil
 }
 
-type addRemoteTrackRes struct {
+type editTrackRes struct {
 	models.TrackContent
 	IsOk    bool
 	Message string
 }
 
-func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]addRemoteTrackRes, error) {
+func AddRemoteTrack(client *spotify.Client, ctx context.Context, playlistId string, tracks []models.TrackContent) ([]editTrackRes, error) {
 	if playlistId == "" {
-		return []addRemoteTrackRes{}, fmt.Errorf("playlistId is empty")
+		return []editTrackRes{}, fmt.Errorf("playlistId is empty")
 	}
 
-	result := []addRemoteTrackRes{}
+	result := []editTrackRes{}
 	trackIds := []spotify.ID{}
 	for _, v := range tracks {
 		if v.Id != "" {
-			result = append(result, addRemoteTrackRes{v, true, ""})
+			result = append(result, editTrackRes{v, true, ""})
 			trackIds = append(trackIds, spotify.ID(v.Id))
 		} else {
 			// IDがないときは検索する
 			res, err := client.Search(ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
 			if err != nil {
-				return []addRemoteTrackRes{}, fmt.Errorf("failed to search: %w", err)
+				return []editTrackRes{}, fmt.Errorf("failed to search: %w", err)
 			}
 			if len(res.Tracks.Tracks) == 0 {
-				result = append(result, addRemoteTrackRes{v, false, "no search results found"})
+				result = append(result, editTrackRes{v, false, "no search results found"})
 				continue
 			}
 			trackIds = append(trackIds, res.Tracks.Tracks[0].ID)
 			content := models.FullTrackToContent(&res.Tracks.Tracks[0])
 			content.FileName = v.FileName
-			result = append(result, addRemoteTrackRes{content, true, ""})
+			result = append(result, editTrackRes{content, true, ""})
 		}
 	}
+	if len(trackIds) == 0 {
+		// 検索結果が何も見つからなかった場合
+		return result, nil
+	}
 
-	_, err := client.AddTracksToPlaylist(ctx, spotify.ID(playlistId), trackIds...)
-	if err != nil {
-		return []addRemoteTrackRes{}, err
+	LIMIT := 100
+	for offset := 0; true; offset += LIMIT {
+		if len(trackIds)-1 < offset {
+			break
+		}
+		var trackChunk []spotify.ID
+		if offset+LIMIT < len(trackIds) {
+			trackChunk = trackIds[offset : offset+LIMIT]
+		} else {
+			trackChunk = trackIds[offset:]
+		}
+		_, err := client.AddTracksToPlaylist(ctx, spotify.ID(playlistId), trackChunk...)
+		if err != nil {
+			return []editTrackRes{}, err
+		}
 	}
 	return result, nil
+}
+
+func RemoveRemoteTrack(client *spotify.Client, ctx context.Context, playlist models.PlaylistContent, tracks []models.TrackContent) error {
+	if playlist.Id == "" {
+		return errors.New("playlist id is empty")
+	}
+
+	trackIds := []spotify.ID{}
+	for _, v := range tracks {
+		if v.Id == "" {
+			return fmt.Errorf("track %v is not have track id", v)
+		}
+		trackIds = append(trackIds, spotify.ID(v.Id))
+	}
+
+	_, err := client.RemoveTracksFromPlaylist(ctx, spotify.ID(playlist.Id), trackIds...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RemoveRemotePlaylist(client *spotify.Client, ctx context.Context, playlist models.PlaylistContent) error {
+	if playlist.Id == "" {
+		return errors.New("playlist id is empty")
+	}
+	err := client.UnfollowPlaylist(ctx, spotify.ID(playlist.Id))
+	if err != nil {
+		return err
+	}
+	return nil
 }
