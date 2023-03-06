@@ -3,6 +3,7 @@ package repositories
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/kajikentaro/spotify-file-based-client/client/models"
 	"github.com/zmb3/spotify/v2"
@@ -74,6 +75,8 @@ func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackCont
 		} else {
 			// IDがないときは検索する
 			res, err := r.client.Search(r.ctx, v.SearchQuery(), spotify.SearchTypeTrack, spotify.Limit(1))
+			// 30秒ごとのaccess limitがあるので1秒待機する
+			time.Sleep(time.Second * 1)
 			if err != nil {
 				return []EditTrackRes{}, fmt.Errorf("failed to search: %w", err)
 			}
