@@ -39,8 +39,7 @@ func init() {
 
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
-	Short: "clean up unused playlist entity txt",
-	Long:  `clean up unused playlist entity txt`,
+	Short: "Clean up unused playlist entity txt",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := setup(ctx)
@@ -56,17 +55,16 @@ var cleanCmd = &cobra.Command{
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "spotifyfbc",
-	Short: "spotifyfbc: Spotify file-based client",
-	Long: `Spotify file-based client
-  Edit your playlists by moving directories and file locations`,
+	Use:   "spotify-fbc",
+	Short: "Spotify file-based client",
+	Long: `Spotify file-based client: 
+Edit your playlists by moving directories and file locations`,
 }
 
 // TODO: 特定プレイリストのみのpush機能
 var pushCmd = &cobra.Command{
 	Use:   "push",
-	Short: "Synchronize your local files and directories with your spotify account.",
-	Long:  `Synchronize your local files and directories with your spotify account`,
+	Short: "Synchronize your local files and directories with your spotify account",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := setup(ctx)
@@ -80,8 +78,7 @@ var pushCmd = &cobra.Command{
 
 var compareCmd = &cobra.Command{
 	Use:   "compare",
-	Short: "TODO",
-	Long:  `login`,
+	Short: "Compare local playlists with your spotify account and print the difference",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := setup(ctx)
@@ -95,8 +92,7 @@ var compareCmd = &cobra.Command{
 
 var resetCmd = &cobra.Command{
 	Use:   "reset",
-	Short: "Delete user-specific data such as OAuth token and Client ID without music txt.",
-	Long:  `Delete user-specific data such as OAuth token and Client ID without music txt.`,
+	Short: "Delete user-specific data such as OAuth token and Client ID excluding music txt",
 	Run: func(cmd *cobra.Command, args []string) {
 		logins.RemoveCache()
 	},
@@ -104,8 +100,7 @@ var resetCmd = &cobra.Command{
 
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "TODO",
-	Long:  `TODO`,
+	Short: "Logout from your spotify account excluding API keys",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		_, login := setup(ctx)
@@ -117,8 +112,7 @@ var logoutCmd = &cobra.Command{
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "TODO",
-	Long:  `login`,
+	Short: "Perform login process",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		setup(ctx)
@@ -127,8 +121,7 @@ var loginCmd = &cobra.Command{
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version number of spotifyfbc",
-	Long:  `All software has versions. This is spotifyfilefbc's`,
+	Short: "Print the version number of spotify-fbc",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("0.0.1")
 	},
@@ -136,8 +129,10 @@ var versionCmd = &cobra.Command{
 
 var pullCmd = &cobra.Command{
 	Use:   "pull",
-	Short: "TODO",
-	Long:  `TODO`,
+	Short: "Download playlists that your spotify account has. All of your existing local playlists will be overwritten",
+	Long: `Download playlists that your spotify account has.
+All of your existing local playlists will be overwritten.
+If you have local-specific files, It will be remained`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := setup(ctx)
