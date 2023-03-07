@@ -130,24 +130,35 @@ func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackCont
 }
 
 func (r *Repository) AddRemoteTrack(playlistId string, tracks []models.TrackContent, c chan []models.TrackContent) error {
-	// 100個ずつに分割して実行
-	LIMIT := 100
-	for offset := 0; true; offset += LIMIT {
-		if len(tracks)-1 < offset {
-			break
-		}
-		var trackChunk []models.TrackContent
-		if offset+LIMIT < len(tracks) {
-			trackChunk = tracks[offset : offset+LIMIT]
-		} else {
-			trackChunk = tracks[offset:]
-		}
-		doneTracks, err := r.addRemoteTrack(playlistId, trackChunk)
+	// 50個ずつに分割して実行
+	err := splitProcess(50, tracks, func(chunk []models.TrackContent) error {
+		doneTracks, err := r.addRemoteTrack(playlistId, chunk)
 		if err != nil {
 			return err
 		}
 		// 実行の途中結果をすぐに返す
 		c <- doneTracks
+		return nil
+	})
+	return err
+}
+
+func splitProcess[T any](limit int, massiveArray []T, f func([]T) error) error {
+	// execute with splited array
+	for offset := 0; true; offset += limit {
+		if len(massiveArray)-1 < offset {
+			break
+		}
+		var chunk []T
+		if offset+limit < len(massiveArray) {
+			chunk = massiveArray[offset : offset+limit]
+		} else {
+			chunk = massiveArray[offset:]
+		}
+		err := f(chunk)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -165,7 +176,10 @@ func (r *Repository) RemoveRemoteTrack(playlist models.PlaylistContent, tracks [
 		trackIds = append(trackIds, spotify.ID(v.Id))
 	}
 
-	_, err := r.client.RemoveTracksFromPlaylist(r.ctx, spotify.ID(playlist.Id), trackIds...)
+	err := splitProcess(50, trackIds, func(chunk []spotify.ID) error {
+		_, err := r.client.RemoveTracksFromPlaylist(r.ctx, spotify.ID(playlist.Id), chunk...)
+		return err
+	})
 	if err != nil {
 		return err
 	}
