@@ -27,6 +27,7 @@ type PlaylistContent struct {
 func UnmarshalTrackContent(text string) TrackContent {
 	result := TrackContent{}
 
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	entries := strings.Split(text, "\n")
 	ts := reflect.TypeOf(result)
 	vs := reflect.ValueOf(&result)
@@ -51,6 +52,7 @@ func UnmarshalTrackContent(text string) TrackContent {
 func UnmarshalPlaylistContent(text string) PlaylistContent {
 	result := PlaylistContent{}
 
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	entries := strings.Split(text, "\n")
 	ts := reflect.TypeOf(result)
 	vs := reflect.ValueOf(&result)
