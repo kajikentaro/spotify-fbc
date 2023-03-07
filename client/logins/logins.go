@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -58,11 +60,42 @@ func (l *Login) Login() error {
 	url := auth.AuthURL(state)
 	fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
 
-	fmt.Println("Please enter your code:")
-	scanner := bufio.NewScanner(os.Stdin) // 標準入力を受け付けるスキャナ
-	scanner.Scan()                        // １行分の入力を取得する
-	code := scanner.Text()
+	ch := make(chan string)
+	defer close(ch)
 
+	if l.redirectURI == "http://localhost:8080/callback" {
+		fmt.Println("Waiting a callback. You can also paste code:")
+		// 'code'取得用のサーバーを立てる
+		http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+			code := r.URL.Query().Get("code")
+			s := r.URL.Query().Get("state")
+			if code == "" {
+				w.Write([]byte("Error: Cannot take code."))
+			} else if state != s {
+				w.Write([]byte("Error: query 'state' is wrong."))
+			} else {
+				ch <- code
+				w.Write([]byte("OAuth login was successful. You can close this window."))
+			}
+		})
+		go func() {
+			err := http.ListenAndServe(":8080", nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+	} else {
+		fmt.Println("Please enter your code query:")
+	}
+
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		code := scanner.Text()
+		ch <- code
+	}()
+
+	code := <-ch
 	token, err := auth.Exchange(l.ctx, code)
 	if err != nil {
 		return err

@@ -18,14 +18,10 @@ import (
 var SPOTIFY_PLAYLIST_ROOT = "spotify-fbc"
 
 func Execute() {
-	log.Println("start")
-	fmt.Println()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println()
-	log.Println("done")
 }
 
 func init() {
