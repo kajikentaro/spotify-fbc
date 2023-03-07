@@ -52,6 +52,9 @@ func (r *Repository) FetchLocalPlaylistDir() ([]string, error) {
 		if !e.IsDir() {
 			continue
 		}
+		if e.Name() == ".git" {
+			continue
+		}
 		result = append(result, e.Name())
 	}
 	return result, nil
