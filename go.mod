@@ -1,4 +1,4 @@
-module github.com/kajikentaro/spotify-file-based-client/client
+module github.com/kajikentaro/spotify-file-based-client
 
 go 1.19
 
