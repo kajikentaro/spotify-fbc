@@ -35,6 +35,7 @@ func init() {
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(resetCmd)
 	rootCmd.AddCommand(compareCmd)
 	rootCmd.AddCommand(pushCmd)
 	rootCmd.AddCommand(cleanCmd)
@@ -96,6 +97,15 @@ var compareCmd = &cobra.Command{
 	},
 }
 
+var resetCmd = &cobra.Command{
+	Use:   "reset",
+	Short: "Delete user-specific data such as OAuth token and Client ID without music txt.",
+	Long:  `Delete user-specific data such as OAuth token and Client ID without music txt.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		logins.RemoveCache()
+	},
+}
+
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "TODO",
@@ -103,7 +113,9 @@ var logoutCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		_, login := setup(ctx)
-		login.RemoveCache()
+		if err := login.Logout(); err != nil {
+			log.Fatalf(err.Error())
+		}
 	},
 }
 
@@ -142,45 +154,46 @@ var pullCmd = &cobra.Command{
 }
 
 func setup(ctx context.Context) (*spotify.Client, logins.Login) {
-	// キャッシュがある場合
 	login, isOk := logins.NewFromCache(ctx)
-	if isOk {
-		client := login.GetClient()
-		return client, login
+
+	// APIの各キーが登録されていない場合
+	if !isOk {
+		// set up variables
+		clientID := os.Getenv("CLIENT_ID")
+		clientSecret := os.Getenv("CLIENT_SECRET")
+		redirectUri := os.Getenv("REDIRECT_URI")
+		if clientID == "" {
+			fmt.Println("Please visit https://developer.spotify.com/dashboard/applications and do 'CREATE AN APP'.")
+			fmt.Println("Enter your Client ID:")
+			clientID = readLine()
+			fmt.Println("Enter your Cilent Secret:")
+			clientSecret = readLine()
+			fmt.Println("Enter your Redirect URI: (default http://localhost:8080/callback)")
+			redirectUri = readLine()
+		}
+		if redirectUri == "" {
+			redirectUri = "http://localhost:8080/callback"
+		}
+		login = logins.NewLogin(ctx, clientID, clientSecret, redirectUri, nil)
 	}
 
-	// set up variables
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	redirectUri := os.Getenv("REDIRECT_URI")
-	if clientID == "" {
-		fmt.Println("Please visit https://developer.spotify.com/dashboard/applications and do 'CREATE AN APP'.")
-		fmt.Println("Enter your Client ID:")
-		clientID = readLine()
-		fmt.Println("Enter your Cilent Secret:")
-		clientSecret = readLine()
-		fmt.Println("Enter your Redirect URI: (default http://localhost:8080/callback)")
-		redirectUri = readLine()
-	}
-	if redirectUri == "" {
-		redirectUri = "http://localhost:8080/callback"
+	// ログアウト状態の場合
+	if !login.IsLogin() {
+		err := login.Login()
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		// save cache
+		err = login.SaveCache()
+		if err != nil {
+			log.Println("failed to save cache: ", err)
+		} else {
+			cachePath, _ := logins.GetCachePath()
+			log.Println("token cache was saved to ", cachePath)
+		}
 	}
 
-	// try login
-	login = logins.NewLogin(ctx, clientID, clientSecret, redirectUri, nil)
-	err := login.Login()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// save cache
-	err = login.SaveCache()
-	if err != nil {
-		log.Println("failed to save cache: ", err)
-	} else {
-		cachePath, _ := logins.GetCachePath()
-		log.Println("token cache was saved to ", cachePath)
-	}
 	return login.GetClient(), login
 }
 

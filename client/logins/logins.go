@@ -23,6 +23,10 @@ type Login struct {
 	redirectURI  string
 }
 
+func (l *Login) IsLogin() bool {
+	return l.token != nil
+}
+
 func GetAuth(redirectURI, clientID, clientSecret string) *spotifyauth.Authenticator {
 	auth := spotifyauth.New(
 		spotifyauth.WithRedirectURL(redirectURI),
@@ -103,7 +107,19 @@ func (l *Login) SaveCache() error {
 	return nil
 }
 
-func (l *Login) RemoveCache() error {
+func (l *Login) Logout() error {
+	ctx := context.Background()
+	withoutToken := NewLogin(ctx, l.clientId, l.clientSecret, l.redirectURI, nil)
+	err := withoutToken.SaveCache()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RemoveCache() error {
 	cachePath, err := GetCachePath()
 	if err != nil {
 		return err
