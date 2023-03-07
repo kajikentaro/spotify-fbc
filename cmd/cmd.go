@@ -19,7 +19,7 @@ var SPOTIFY_PLAYLIST_ROOT = "spotify-fbc"
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -46,7 +46,7 @@ var cleanCmd = &cobra.Command{
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		deleted, err := repository.CleanUpPlaylistContent()
 		for d := range deleted {
-			log.Println(d, "was deleted.")
+			fmt.Fprintln(os.Stderr, d, "wad deleted.")
 		}
 		if err != nil {
 			log.Fatalln(err)
@@ -71,7 +71,7 @@ var pushCmd = &cobra.Command{
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.PushPlaylists(); err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalln(err)
 		}
 	},
 }
@@ -85,7 +85,7 @@ var compareCmd = &cobra.Command{
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.ComparePlaylists(); err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalln(err)
 		}
 	},
 }
@@ -105,7 +105,7 @@ var logoutCmd = &cobra.Command{
 		ctx := context.Background()
 		_, login := setup(ctx)
 		if err := login.Logout(); err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalln(err)
 		}
 	},
 }
@@ -139,7 +139,7 @@ If you have local-specific files, It will be remained`,
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.PullPlaylists(); err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalln(err)
 		}
 	},
 }
@@ -178,10 +178,10 @@ func setup(ctx context.Context) (*spotify.Client, logins.Login) {
 		// save cache
 		err = login.SaveCache()
 		if err != nil {
-			log.Println("failed to save cache: ", err)
+			fmt.Fprintln(os.Stderr, "failed to save cache: ", err)
 		} else {
 			cachePath, _ := logins.GetCachePath()
-			log.Println("token cache was saved to ", cachePath)
+			fmt.Fprintln(os.Stderr, "token cache was saved to ", cachePath)
 		}
 	}
 

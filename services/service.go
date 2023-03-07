@@ -3,7 +3,6 @@ package services
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,7 +44,7 @@ func (m *model) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.P
 		err := m.repository.RemoveTrackContent(playlist.DirName, w)
 		if err != nil {
 			// 削除に失敗した場合
-			fmt.Println("failed to remove the old track content: ", filepath.Join(playlist.DirName, w.FileName))
+			fmt.Fprintln(os.Stderr, "failed to remove the old track content: ", filepath.Join(playlist.DirName, w.FileName))
 			continue
 		}
 		fileStem, _ := getFileStem(w.FileName)
@@ -56,7 +55,7 @@ func (m *model) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.P
 		w.FileName = usedFileStem.Take(stemName) + ".txt"
 		err = m.repository.CreateTrackContent(playlist.DirName, w)
 		if err != nil {
-			fmt.Println("failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
+			fmt.Fprintln(os.Stderr, "failed to create a new track content: ", filepath.Join(playlist.DirName, w.FileName))
 		}
 	}
 }
@@ -151,7 +150,7 @@ func (m *model) PushPlaylists() error {
 	// 後片付け: 不要なプレイリストテキストを消去
 	deleted, err := m.repository.CleanUpPlaylistContent()
 	for _, d := range deleted {
-		log.Println(d, "was deleted.")
+		fmt.Fprintln(os.Stderr, d, "was deleted.")
 	}
 	if err != nil {
 		return err

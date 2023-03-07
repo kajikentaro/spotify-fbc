@@ -81,7 +81,7 @@ func (l *Login) Login() error {
 		go func() {
 			err := http.ListenAndServe(":8080", nil)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatalln(err)
 			}
 		}()
 	} else {

@@ -3,6 +3,7 @@ package repositories
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/kajikentaro/spotify-file-based-client/models"
@@ -78,19 +79,19 @@ func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackCont
 		if err != nil {
 			// 失敗したときはIDが存在するすべてのトラックをエラーにする
 			for _, w := range inputTracks {
-				fmt.Println(w.FileName, "failed to search track: ", err.Error())
+				fmt.Fprintln(os.Stderr, w.FileName, "failed to search track: ", err.Error())
 			}
 		} else {
 			for idx, w := range result {
 				if w == nil {
-					fmt.Println(inputTracks[idx].FileName, "no search result found", err.Error())
+					fmt.Fprintln(os.Stderr, inputTracks[idx].FileName, "no search result found", err.Error())
 					continue
 				}
 				t := models.FullTrackToContent(w)
 				t.FileName = inputTracks[idx].FileName
 				confirmedIds = append(confirmedIds, spotify.ID(t.Id))
 				confirmedTracks = append(confirmedTracks, t)
-				fmt.Println(t.Name, "was found")
+				fmt.Fprintln(os.Stderr, t.Name, "was found")
 			}
 		}
 	}
@@ -104,18 +105,18 @@ func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackCont
 		// 30秒ごとのaccess limitがあるので1秒待機する
 		time.Sleep(time.Second * 1)
 		if err != nil {
-			fmt.Println(v.FileName, "failed to search track: ", err.Error())
+			fmt.Fprintln(os.Stderr, v.FileName, "failed to search track: ", err.Error())
 			continue
 		}
 		if len(res.Tracks.Tracks) == 0 {
-			fmt.Println(v.FileName, "no search result found")
+			fmt.Fprintln(os.Stderr, v.FileName, "no search result found")
 			continue
 		}
 		t := models.FullTrackToContent(&res.Tracks.Tracks[0])
 		t.FileName = v.FileName
 		confirmedIds = append(confirmedIds, spotify.ID(t.Id))
 		confirmedTracks = append(confirmedTracks, t)
-		fmt.Println(t.Name, "was found")
+		fmt.Fprintln(os.Stderr, t.Name, "was found")
 	}
 	if len(confirmedIds) == 0 {
 		// 検索結果が何も見つからなかった場合

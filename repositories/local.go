@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -86,7 +85,7 @@ func (r *Repository) FetchLocalPlaylistTrack(dirName string) ([]models.TrackCont
 			t.FileName = e.Name()
 		}
 		if t.FileName != e.Name() {
-			log.Printf("Warning: a file_name property was incorrect. The property in the file was '%s', but path was '%s'.", t.FileName, e.Name())
+			fmt.Fprintf(os.Stderr, "Warning: a file_name property was incorrect. The property in the file was '%s', but path was '%s'.", t.FileName, e.Name())
 			t.FileName = e.Name()
 		}
 		result = append(result, t)
@@ -110,7 +109,7 @@ func (r *Repository) CreatePlaylistDirectory(playlist models.PlaylistContent) er
 	dirPath := filepath.Join(r.rootPath, playlist.DirName)
 	err := os.Mkdir(dirPath, os.ModePerm)
 	if os.IsExist(err) {
-		log.Println(playlist.Name, "is already created")
+		fmt.Fprintln(os.Stderr, playlist.Name, "is already created")
 	} else if err != nil {
 		return fmt.Errorf("failed to create %s", dirPath)
 	}
