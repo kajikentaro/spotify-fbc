@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -12,8 +13,6 @@ import (
 	"github.com/kajikentaro/spotify-file-based-client/client/services"
 	"github.com/spf13/cobra"
 	"github.com/zmb3/spotify/v2"
-	spotifyauth "github.com/zmb3/spotify/v2/auth"
-	"golang.org/x/oauth2"
 )
 
 var SPOTIFY_PLAYLIST_ROOT = "spotify-fbc"
@@ -30,10 +29,7 @@ func Execute() {
 }
 
 func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalln(err)
-	}
+	godotenv.Load()
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(pullCmd)
@@ -50,7 +46,7 @@ var cleanCmd = &cobra.Command{
 	Long:  `clean up unused playlist entity txt`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client, _ := genClient(ctx)
+		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		deleted, err := repository.CleanUpPlaylistContent()
 		for d := range deleted {
@@ -76,7 +72,7 @@ var pushCmd = &cobra.Command{
 	Long:  `Synchronize your local files and directories with your spotify account`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client, _ := genClient(ctx)
+		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.PushPlaylists(); err != nil {
@@ -91,7 +87,7 @@ var compareCmd = &cobra.Command{
 	Long:  `login`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client, _ := genClient(ctx)
+		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.ComparePlaylists(); err != nil {
@@ -106,7 +102,7 @@ var logoutCmd = &cobra.Command{
 	Long:  `TODO`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		_, login := genClient(ctx)
+		_, login := setup(ctx)
 		login.RemoveCache()
 	},
 }
@@ -117,7 +113,7 @@ var loginCmd = &cobra.Command{
 	Long:  `login`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		genClient(ctx)
+		setup(ctx)
 	},
 }
 
@@ -136,7 +132,7 @@ var pullCmd = &cobra.Command{
 	Long:  `TODO`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		client, _ := genClient(ctx)
+		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
 		if err := model.PullPlaylists(); err != nil {
@@ -145,43 +141,51 @@ var pullCmd = &cobra.Command{
 	},
 }
 
-func genClient(ctx context.Context) (*spotify.Client, logins.Login) {
-	var redirectURI = "http://localhost:8080/callback"
-	/* set up variables */
+func setup(ctx context.Context) (*spotify.Client, logins.Login) {
+	// キャッシュがある場合
+	login, isOk := logins.NewFromCache(ctx)
+	if isOk {
+		client := login.GetClient()
+		return client, login
+	}
+
+	// set up variables
 	clientID := os.Getenv("CLIENT_ID")
 	clientSecret := os.Getenv("CLIENT_SECRET")
-	auth := spotifyauth.New(
-		spotifyauth.WithRedirectURL(redirectURI),
-		spotifyauth.WithScopes(spotifyauth.ScopePlaylistReadPrivate, spotifyauth.ScopePlaylistReadCollaborative, spotifyauth.ScopePlaylistModifyPrivate),
-		spotifyauth.WithClientID(clientID),
-		spotifyauth.WithClientSecret(clientSecret),
-	)
-
-	login := logins.NewLogin(ctx, auth)
-
-	/* OAuth login and get client*/
-	var token *oauth2.Token
-	if login.IsCacheExist() {
-		var err error
-		token, err = login.ReadCache()
-		if err != nil {
-			log.Fatalln(err)
-		}
-	} else {
-		var err error
-		token, err = login.Login()
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		err = login.SaveCache(token)
-		if err != nil {
-			log.Println("failed to save cache: ", err)
-		} else {
-			cachePath, _ := login.GetCachePath()
-			log.Println("token cache was saved to ", cachePath)
-		}
+	redirectUri := os.Getenv("REDIRECT_URI")
+	if clientID == "" {
+		fmt.Println("Please visit https://developer.spotify.com/dashboard/applications and do 'CREATE AN APP'.")
+		fmt.Println("Enter your Client ID:")
+		clientID = readLine()
+		fmt.Println("Enter your Cilent Secret:")
+		clientSecret = readLine()
+		fmt.Println("Enter your Redirect URI: (default http://localhost:8080/callback)")
+		redirectUri = readLine()
 	}
-	client := login.GetClient(token)
-	return client, login
+	if redirectUri == "" {
+		redirectUri = "http://localhost:8080/callback"
+	}
+
+	// try login
+	login = logins.NewLogin(ctx, clientID, clientSecret, redirectUri, nil)
+	err := login.Login()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// save cache
+	err = login.SaveCache()
+	if err != nil {
+		log.Println("failed to save cache: ", err)
+	} else {
+		cachePath, _ := logins.GetCachePath()
+		log.Println("token cache was saved to ", cachePath)
+	}
+	return login.GetClient(), login
+}
+
+func readLine() string {
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+	return scanner.Text()
 }

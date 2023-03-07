@@ -16,17 +16,42 @@ import (
 )
 
 type Login struct {
-	ctx  context.Context
-	auth *spotifyauth.Authenticator
+	ctx          context.Context
+	token        *oauth2.Token
+	clientId     string
+	clientSecret string
+	redirectURI  string
 }
 
-func NewLogin(ctx context.Context, auth *spotifyauth.Authenticator) Login {
-	return Login{ctx: ctx, auth: auth}
+func GetAuth(redirectURI, clientID, clientSecret string) *spotifyauth.Authenticator {
+	auth := spotifyauth.New(
+		spotifyauth.WithRedirectURL(redirectURI),
+		spotifyauth.WithScopes(spotifyauth.ScopePlaylistReadPrivate, spotifyauth.ScopePlaylistReadCollaborative, spotifyauth.ScopePlaylistModifyPrivate),
+		spotifyauth.WithClientID(clientID),
+		spotifyauth.WithClientSecret(clientSecret),
+	)
+	return auth
 }
 
-func (l *Login) Login() (*oauth2.Token, error) {
+func NewFromCache(ctx context.Context) (Login, bool) {
+	if IsCacheExist() {
+		cache, err := ReadCache()
+		if err != nil {
+			return Login{}, false
+		}
+		return NewLogin(ctx, cache.ClientId, cache.ClientSecret, cache.RedirectURI, cache.Token), true
+	}
+	return Login{}, false
+}
+
+func NewLogin(ctx context.Context, clientId, clientSecret, redirectURI string, token *oauth2.Token) Login {
+	return Login{ctx: ctx, clientId: clientId, clientSecret: clientSecret, redirectURI: redirectURI, token: token}
+}
+
+func (l *Login) Login() error {
 	state := getRandomStr()
-	url := l.auth.AuthURL(state)
+	auth := GetAuth(l.redirectURI, l.clientId, l.clientSecret)
+	url := auth.AuthURL(state)
 	fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
 
 	fmt.Println("Please enter your code:")
@@ -34,27 +59,38 @@ func (l *Login) Login() (*oauth2.Token, error) {
 	scanner.Scan()                        // １行分の入力を取得する
 	code := scanner.Text()
 
-	token, err := l.auth.Exchange(l.ctx, code)
+	token, err := auth.Exchange(l.ctx, code)
 	if err != nil {
-		return token, err
+		return err
 	}
+	l.token = token
 
-	return token, nil
+	return nil
 }
 
-func (l *Login) GetClient(token *oauth2.Token) *spotify.Client {
-	httpClient := l.auth.Client(l.ctx, token)
+func (l *Login) GetClient() *spotify.Client {
+	auth := GetAuth(l.redirectURI, l.clientId, l.clientSecret)
+	httpClient := auth.Client(l.ctx, l.token)
 	client := spotify.New(httpClient)
 	return client
 }
 
-func (l *Login) SaveCache(token *oauth2.Token) error {
-	data, err := json.Marshal(token)
+type Cache struct {
+	Token        *oauth2.Token `json:"token"`
+	ClientId     string        `json:"client_id"`
+	ClientSecret string        `json:"client_secret"`
+	RedirectURI  string        `json:"redirect_uri"`
+}
+
+func (l *Login) SaveCache() error {
+	cache := Cache{Token: l.token, ClientId: l.clientId, ClientSecret: l.clientSecret, RedirectURI: l.redirectURI}
+
+	data, err := json.Marshal(cache)
 	if err != nil {
 		return err
 	}
 
-	cachePath, err := l.GetCachePath()
+	cachePath, err := GetCachePath()
 	if err != nil {
 		return err
 	}
@@ -68,7 +104,7 @@ func (l *Login) SaveCache(token *oauth2.Token) error {
 }
 
 func (l *Login) RemoveCache() error {
-	cachePath, err := l.GetCachePath()
+	cachePath, err := GetCachePath()
 	if err != nil {
 		return err
 	}
@@ -81,8 +117,8 @@ func (l *Login) RemoveCache() error {
 	return nil
 }
 
-func (l *Login) IsCacheExist() bool {
-	cachePath, err := l.GetCachePath()
+func IsCacheExist() bool {
+	cachePath, err := GetCachePath()
 	if err != nil {
 		return false
 	}
@@ -98,8 +134,8 @@ func (l *Login) IsCacheExist() bool {
 	}
 }
 
-func (l *Login) ReadCache() (*oauth2.Token, error) {
-	cachePath, err := l.GetCachePath()
+func ReadCache() (*Cache, error) {
+	cachePath, err := GetCachePath()
 	if err != nil {
 		return nil, err
 	}
@@ -109,16 +145,16 @@ func (l *Login) ReadCache() (*oauth2.Token, error) {
 		return nil, err
 	}
 
-	var token oauth2.Token
-	err = json.Unmarshal(b, &token)
+	var cache Cache
+	err = json.Unmarshal(b, &cache)
 	if err != nil {
 		return nil, err
 	}
 
-	return &token, nil
+	return &cache, nil
 }
 
-func (l *Login) GetCachePath() (string, error) {
+func GetCachePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
