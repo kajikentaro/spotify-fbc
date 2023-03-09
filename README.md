@@ -1,4 +1,4 @@
-# Spotify file-based client
+# Spotify file-based Client
 
 [(JAPANESE 日本語)](./README_jp.md)
 
@@ -86,7 +86,7 @@ Flags:
 Execute the following command.
 
 ```
-spotify-fbc-0.1-linux-amd64 login
+$ spotify-fbc-0.1-linux-amd64 login
 ```
 
 Follow the output on the screen.  
@@ -97,7 +97,7 @@ If you see `token cache was saved to ~~~`, you have succeeded.
 Execute the following command.
 
 ```
-spotify-fbc pull
+$ spotify-fbc pull
 ```
 
 The directory `spotify-fbc` will be created and the songs and playlists will be stored in it.
@@ -132,7 +132,7 @@ A song info text file consists of several properties.
 
 For example, if you create a new file like the following and do `spotify-fbc push`,
 
-```name
+```text
 name What Do You Mean?
 artist Justin Bieber
 ```

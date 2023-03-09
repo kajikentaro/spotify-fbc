@@ -1,4 +1,4 @@
-# Spotify file-based client
+# Spotify file-based Client
 
 [(ENGLISTH 英語)](./README.md)
 
@@ -87,7 +87,7 @@ Flags:
 以下コマンドを実行します
 
 ```
-spotify-fbc-0.1-linux-amd64 login
+$ spotify-fbc-0.1-linux-amd64 login
 ```
 
 1. `Enter your Client ID:`と表示されたら`Client ID`を入力します
@@ -101,7 +101,7 @@ spotify-fbc-0.1-linux-amd64 login
 以下コマンドを実行します
 
 ```
-spotify-fbc pull
+$ spotify-fbc pull
 ```
 
 spotify-fbc というディレクトリが生成され, その中に楽曲,プレイリスト情報が保存されます
@@ -111,7 +111,7 @@ spotify-fbc というディレクトリが生成され, その中に楽曲,プ�
 必要な編集を`spotify-fbc`ディレクトリに行ったら, `push`を行う前に差分を確認しましょう
 
 ```
-spotify-fbc compare
+$ spotify-fbc compare
 
 + new playlist
   + 新宝島
@@ -126,7 +126,7 @@ spotify-fbc compare
 以下コマンドを実行します
 
 ```
-spotify-fbc push
+$ spotify-fbc push
 ```
 
 既存の Spotify プレイリストが, `spotify-fbc`ディレクトリに完全に置き換わります.
@@ -138,7 +138,7 @@ spotify-fbc push
 
 例えば以下のようなファイルを新規作成し,`spotify-fbc push`を行うと,
 
-```
+```text
 name 新宝島
 artist sakanaction
 ```
