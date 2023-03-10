@@ -141,3 +141,12 @@ The search will be performed with the song title as `What Do You Mean?` and the 
 
 Other properties such as `id`, `name`, `artist`, `album`, and `isrc` are also supported.  
 (Other properties are for system administration.)
+
+## Build
+
+For building package on your own, run this command.
+
+```
+ $ GOOS=windows GOARCH=amd64 go build -o spotify-fbc-0.1-windows-amd64.exe .
+ $ GOOS=linux GOARCH=amd64 go build -o spotify-fbc-0.1-linux-amd64 .
+ ```
