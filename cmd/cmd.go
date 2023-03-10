@@ -8,9 +8,9 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/kajikentaro/spotify-file-based-client/logins"
-	"github.com/kajikentaro/spotify-file-based-client/repositories"
-	"github.com/kajikentaro/spotify-file-based-client/services"
+	"github.com/kajikentaro/spotify-fbc/logins"
+	"github.com/kajikentaro/spotify-fbc/repositories"
+	"github.com/kajikentaro/spotify-fbc/services"
 	"github.com/spf13/cobra"
 	"github.com/zmb3/spotify/v2"
 )

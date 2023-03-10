@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/kajikentaro/spotify-file-based-client/cmd"
+	"github.com/kajikentaro/spotify-fbc/cmd"
 )
 
 func main() {

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/kajikentaro/spotify-file-based-client/models"
-	"github.com/kajikentaro/spotify-file-based-client/repositories"
-	"github.com/kajikentaro/spotify-file-based-client/services/uniques"
+	"github.com/kajikentaro/spotify-fbc/models"
+	"github.com/kajikentaro/spotify-fbc/repositories"
+	"github.com/kajikentaro/spotify-fbc/services/uniques"
 )
 
 type model struct {

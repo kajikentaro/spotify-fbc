@@ -41,7 +41,7 @@ file_name What Do You Mean .txt
 ### (1) Download
 
 You can download Windows and Linux versions from here.  
-https://github.com/kajikentaro/spotify-file-based-client/releases/tag/0.1
+https://github.com/kajikentaro/spotify-fbc/releases/tag/0.1
 
 After downloading, it is recommended to rename it to spotify-fbc.  
 (spotify-fbc.exe on Windows)

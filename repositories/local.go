@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/kajikentaro/spotify-file-based-client/models"
+	"github.com/kajikentaro/spotify-fbc/models"
 )
 
 // ローカルのプレイリスト情報txtファイルを読み込み

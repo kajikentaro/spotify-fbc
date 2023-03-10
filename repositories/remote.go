@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/kajikentaro/spotify-file-based-client/models"
+	"github.com/kajikentaro/spotify-fbc/models"
 	"github.com/zmb3/spotify/v2"
 )
 

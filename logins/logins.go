@@ -209,7 +209,7 @@ func GetCachePath() (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(homeDir, ".spotify-file-based-client.json"), nil
+	return filepath.Join(homeDir, ".spotify-fbc.json"), nil
 }
 
 func getRandomStr() string {
