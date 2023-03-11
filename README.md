@@ -41,7 +41,7 @@ file_name What Do You Mean .txt
 ### (1) Download
 
 You can download Windows and Linux versions from here.  
-https://github.com/kajikentaro/spotify-fbc/releases/tag/0.1
+https://github.com/kajikentaro/spotify-fbc/releases/latest
 
 After downloading, it is recommended to rename it to spotify-fbc.  
 (spotify-fbc.exe on Windows)
@@ -149,4 +149,4 @@ For building package on your own, run this command.
 ```
  $ GOOS=windows GOARCH=amd64 go build -o spotify-fbc-0.1-windows-amd64.exe .
  $ GOOS=linux GOARCH=amd64 go build -o spotify-fbc-0.1-linux-amd64 .
- ```
+```
