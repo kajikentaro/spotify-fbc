@@ -11,14 +11,21 @@ import (
 )
 
 func (r *Repository) FetchRemotePlaylistContent() ([]models.PlaylistContent, error) {
+	LIMIT := 20
 	result := []models.PlaylistContent{}
-	playlists, err := r.client.CurrentUsersPlaylists(r.ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range playlists.Playlists {
-		content := models.SimplePlaylistToContent(v)
-		result = append(result, content)
+
+	for offset := 0; true; offset += LIMIT {
+		playlists, err := r.client.CurrentUsersPlaylists(r.ctx, spotify.Offset(offset), spotify.Limit(LIMIT))
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range playlists.Playlists {
+			content := models.SimplePlaylistToContent(v)
+			result = append(result, content)
+		}
+		if len(playlists.Playlists) != LIMIT {
+			break
+		}
 	}
 
 	return result, nil
