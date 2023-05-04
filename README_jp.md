@@ -41,7 +41,7 @@ file_name 新宝島.txt
 
 ### (1) Download
 
-https://github.com/kajikentaro/spotify-fbc/releases/tag/0.1  
+https://github.com/kajikentaro/spotify-fbc/releases/latest
 ここから Windows 版と Linux 版がダウンロードできます.
 
 ダウンロードが完了したら, `spotify-fbc`に名前変更することをおすすめします.(Windows の場合は `spotify-fbc.exe`)
