@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/kajikentaro/spotify-fbc/logins"
@@ -70,6 +71,9 @@ var pushCmd = &cobra.Command{
 		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
+		if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
+			return
+		}
 		if err := model.PushPlaylists(); err != nil {
 			log.Fatalln(err)
 		}
@@ -192,4 +196,25 @@ func readLine() string {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
 	return scanner.Text()
+}
+
+func askForConfirmation(s string) bool {
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Printf("%s [y/n]: ", s)
+
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		if response == "y" || response == "yes" {
+			return true
+		} else if response == "n" || response == "no" {
+			return false
+		}
+	}
 }
