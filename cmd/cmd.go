@@ -70,7 +70,7 @@ var pushCmd = &cobra.Command{
 		ctx := context.Background()
 		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model := services.NewModel(repository)
+		model := services.NewService(repository)
 		if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
 			return
 		}
@@ -87,8 +87,8 @@ var compareCmd = &cobra.Command{
 		ctx := context.Background()
 		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model := services.NewModel(repository)
-		if err := model.Compare(); err != nil {
+		service := services.NewService(repository)
+		if err := service.Compare(); err != nil {
 			log.Fatalln(err)
 		}
 	},
@@ -141,7 +141,7 @@ If you have local-specific files, It will be remained`,
 		ctx := context.Background()
 		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model := services.NewModel(repository)
+		model := services.NewService(repository)
 		if err := model.PullPlaylists(); err != nil {
 			log.Fatalln(err)
 		}

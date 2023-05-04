@@ -9,15 +9,16 @@ import (
 
 	"github.com/kajikentaro/spotify-fbc/models"
 	"github.com/kajikentaro/spotify-fbc/repositories"
+	service_compares "github.com/kajikentaro/spotify-fbc/services/compares"
 	"github.com/kajikentaro/spotify-fbc/services/uniques"
 )
 
-type model struct {
+type service struct {
 	repository *repositories.Repository
 }
 
-func NewModel(repository *repositories.Repository) model {
-	return model{repository: repository}
+func NewService(repository *repositories.Repository) service {
+	return service{repository: repository}
 }
 
 func getFileStem(fileName string) (string, error) {
@@ -29,7 +30,7 @@ func getFileStem(fileName string) (string, error) {
 	return fileStem[1], nil
 }
 
-func (m *model) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.PlaylistContent, res []models.TrackContent) {
+func (m *service) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.PlaylistContent, res []models.TrackContent) {
 	// 現在存在する楽曲txtの一覧を作成
 	for _, w := range res {
 		fileStem, _ := getFileStem(w.FileName)
@@ -60,7 +61,7 @@ func (m *model) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models.P
 	}
 }
 
-func (m *model) addRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {
+func (m *service) addRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {
 	// 曲をリモートのプレイリストに追加
 	c := make(chan []models.TrackContent)
 
@@ -79,55 +80,101 @@ func (m *model) addRemoteTrack(playlist models.PlaylistContent, tracks []models.
 	return nil
 }
 
-func (m *model) PushPlaylists() error {
+func (m *service) Compare() error {
+	fmt.Fprintln(os.Stderr, "now loading ...")
+
+	compare := service_compares.NewCompare(m.repository)
+
+	diff, err := compare.CompareAll()
+	if err != nil {
+		return err
+	}
+
+	for _, v := range diff.LocalOnly {
+		fmt.Println("+", v.Playlist.DirName)
+		for _, w := range v.Tracks {
+			fmt.Println("  +", w.FileName)
+		}
+	}
+
+	for _, v := range diff.RemoteOnly {
+		fmt.Println("-", v.Name)
+	}
+
+	for _, v := range diff.Both {
+		fmt.Println(" ", v.Playlist.Name)
+
+		for _, w := range v.TracksLocalOnly {
+			fmt.Println("  +", w.FileName)
+		}
+		for _, w := range v.TracksRemoteOnly {
+			fmt.Println("  -", w.Name)
+		}
+	}
+
+	if len(diff.RemoteOnly)+len(diff.LocalOnly) == 0 {
+		fmt.Println("\nthere is no difference")
+	}
+
+	return nil
+}
+
+func (m *service) PushPlaylists() error {
+	fmt.Fprintln(os.Stderr, "now loading ...")
+	isChange := false
+
 	// プレイリストの差分を検出
-	diff, err := m.compareAll()
+	compare := service_compares.NewCompare(m.repository)
+	diff, err := compare.CompareAll()
 	if err != nil {
 		return err
 	}
 
 	// 新規追加プレイリストをpushする
-	for _, v := range diff.localOnly {
+	for _, v := range diff.LocalOnly {
 		// プレイリストをリモートに作成
-		resPlaylist, err := m.repository.CreateRemotePlaylist(v.playlist.DirName)
+		resPlaylist, err := m.repository.CreateRemotePlaylist(v.Playlist.DirName)
 		if err != nil {
 			return err
 		}
-		fmt.Println("+", v.playlist.DirName)
+		isChange = true
+		fmt.Println("+", v.Playlist.DirName)
 
 		// プレイリストファイルをローカルに新規に生成する
-		resPlaylist.DirName = v.playlist.DirName
+		resPlaylist.DirName = v.Playlist.DirName
 		m.repository.CreatePlaylistContent(resPlaylist)
 
 		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(resPlaylist, v.tracks); err != nil {
+		if err := m.addRemoteTrack(resPlaylist, v.Tracks); err != nil {
 			return err
 		}
 	}
 
-	for _, v := range diff.remoteOnly {
+	for _, v := range diff.RemoteOnly {
 		// プレイリストをリモートから削除
 		err := m.repository.RemoveRemotePlaylist(v)
 		if err != nil {
 			return err
 		}
+		isChange = true
 		fmt.Println("-", v.Name)
 	}
 
-	for _, v := range diff.both {
-		fmt.Println(" ", v.playlist.Name)
+	for _, v := range diff.Both {
+		isChange = true
+		fmt.Println(" ", v.Playlist.Name)
 
 		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(v.playlist, v.tracksLocalOnly); err != nil {
+		if err := m.addRemoteTrack(v.Playlist, v.TracksLocalOnly); err != nil {
 			return err
 		}
 
 		// 曲をリモートのプレイリストから削除
-		err = m.repository.RemoveRemoteTrack(v.playlist, v.tracksRemoteOnly)
+		err = m.repository.RemoveRemoteTrack(v.Playlist, v.TracksRemoteOnly)
 		if err != nil {
 			return err
 		}
-		for _, w := range diff.remoteOnly {
+		for _, w := range diff.RemoteOnly {
 			fmt.Println("  -", w.Name)
 		}
 	}
@@ -140,245 +187,14 @@ func (m *model) PushPlaylists() error {
 	if err != nil {
 		return err
 	}
+
+	if !isChange {
+		fmt.Println("\nthere was no change on remote")
+	}
 	return nil
 }
 
-type diffAll struct {
-	localOnly []struct {
-		playlist models.PlaylistContent
-		tracks   []models.TrackContent
-	}
-	remoteOnly []models.PlaylistContent
-	both       []struct {
-		playlist         models.PlaylistContent
-		tracksRemoteOnly []models.TrackContent
-		tracksLocalOnly  []models.TrackContent
-	}
-}
-
-func (m *model) compareAll() (diffAll, error) {
-	playlistDiff, err := m.calcDiffPlaylist()
-	if err != nil {
-		return diffAll{}, err
-	}
-
-	answer := diffAll{}
-
-	for _, v := range playlistDiff.localOnly {
-		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
-		if err != nil {
-			return diffAll{}, err
-		}
-
-		r := struct {
-			playlist models.PlaylistContent
-			tracks   []models.TrackContent
-		}{}
-		r.playlist = v
-		r.tracks = tracks
-		answer.localOnly = append(answer.localOnly, r)
-	}
-
-	answer.remoteOnly = playlistDiff.remoteOnly
-
-	for _, v := range playlistDiff.both {
-		diff, err := m.calcDiffTrack(v)
-		if err != nil {
-			return diffAll{}, err
-		}
-
-		r := struct {
-			playlist         models.PlaylistContent
-			tracksRemoteOnly []models.TrackContent
-			tracksLocalOnly  []models.TrackContent
-		}{}
-		r.playlist = v
-		r.tracksRemoteOnly = diff.remoteOnly
-		r.tracksLocalOnly = diff.localOnly
-		answer.both = append(answer.both, r)
-	}
-
-	return answer, nil
-}
-
-func (m *model) Compare() error {
-	diff, err := m.compareAll()
-	if err != nil {
-		return err
-	}
-
-	for _, v := range diff.localOnly {
-		fmt.Println("+", v.playlist.DirName)
-		for _, w := range v.tracks {
-			fmt.Println("  +", w.FileName)
-		}
-	}
-
-	for _, v := range diff.remoteOnly {
-		fmt.Println("-", v.Name)
-	}
-
-	for _, v := range diff.both {
-		fmt.Println(" ", v.playlist.Name)
-		for _, w := range v.tracksLocalOnly {
-			fmt.Println("  +", w.FileName)
-		}
-		for _, w := range v.tracksRemoteOnly {
-			fmt.Println("  -", w.Name)
-		}
-	}
-
-	return nil
-}
-
-type diffPlaylist struct {
-	localOnly  []models.PlaylistContent
-	remoteOnly []models.PlaylistContent
-	both       []models.PlaylistContent
-}
-
-func (m *model) calcDiffPlaylist() (diffPlaylist, error) {
-	// プレイリスト情報のテキストファイル読み込み
-	playlistContents, err := m.repository.FetchLocalPlaylistContent()
-	if err != nil {
-		return diffPlaylist{}, err
-	}
-	// 検索しやすいようにmapにする
-	dirNameToPL := map[string]models.PlaylistContent{}
-	for _, v := range playlistContents {
-		dirNameToPL[v.DirName] = v
-	}
-
-	// ディレクトリの一覧を取得
-	dirs, err := m.repository.FetchLocalPlaylistDir()
-	if err != nil {
-		return diffPlaylist{}, err
-	}
-	// ディレクトリを "プレイリスト情報のテキストファイル" の情報と関連付けて配列で保存
-	localPLs := []models.PlaylistContent{}
-	for _, v := range dirs {
-		if w, isExist := dirNameToPL[v]; isExist {
-			// プレイリスト情報txtが存在する場合
-			localPLs = append(localPLs, w)
-		} else {
-			localPLs = append(localPLs, models.PlaylistContent{DirName: v})
-		}
-	}
-
-	// リモートのプレイリストを配列で取得
-	remotePLs, err := m.repository.FetchRemotePlaylistContent()
-	if err != nil {
-		return diffPlaylist{}, err
-	}
-
-	// 検索しやすいようにmapを作成
-	idToPlaylist := map[string]models.PlaylistContent{}
-	for _, v := range localPLs {
-		idToPlaylist[v.Id] = v
-	}
-	for _, v := range remotePLs {
-		// 上書きしないように
-		old := idToPlaylist[v.Id]
-		idToPlaylist[v.Id] = models.PlaylistContent{Name: v.Name, DirName: old.DirName, Id: v.Id}
-	}
-
-	// localにあれば +1, remoteにあれば +2する
-	// 1ならlocalのみ, 2ならremoteのみ, 3なら両方に存在することになる
-	playlistState := map[string]int{}
-	localOnly := []models.PlaylistContent{}
-	for _, v := range localPLs {
-		if v.Id == "" {
-			localOnly = append(localOnly, v)
-			continue
-		}
-		playlistState[v.Id] += 1
-	}
-	for _, v := range remotePLs {
-		playlistState[v.Id] += 2
-	}
-
-	remoteOnly := []models.PlaylistContent{}
-	both := []models.PlaylistContent{}
-	for id, bit := range playlistState {
-		if bit == 1 {
-			localOnly = append(localOnly, idToPlaylist[id])
-		}
-		if bit == 2 {
-			remoteOnly = append(remoteOnly, idToPlaylist[id])
-		}
-		if bit == 3 {
-			both = append(both, idToPlaylist[id])
-		}
-	}
-
-	return diffPlaylist{localOnly: localOnly, remoteOnly: remoteOnly, both: both}, nil
-
-}
-
-type diffTrack struct {
-	localOnly  []models.TrackContent
-	remoteOnly []models.TrackContent
-	both       []models.TrackContent
-}
-
-func (m *model) calcDiffTrack(playlist models.PlaylistContent) (diffTrack, error) {
-	if playlist.DirName == "" {
-		return diffTrack{}, fmt.Errorf("property DirName is empty")
-	}
-	if playlist.Id == "" {
-		return diffTrack{}, fmt.Errorf("property Id is empty")
-	}
-
-	localTracks, err := m.repository.FetchLocalPlaylistTrack(playlist.DirName)
-	if err != nil {
-		return diffTrack{}, err
-	}
-	remoteTracks, err := m.repository.FetchRemotePlaylistTrack(playlist.Id)
-	if err != nil {
-		return diffTrack{}, err
-	}
-
-	idToTrack := map[string]models.TrackContent{}
-	for _, v := range localTracks {
-		idToTrack[v.Id] = v
-	}
-	for _, v := range remoteTracks {
-		idToTrack[v.Id] = v
-	}
-
-	// localにあれば +1, remoteにあれば +2する
-	// 1ならlocalのみ, 2ならremoteのみ, 3なら両方に存在することになる
-	trackStatus := map[string]int{}
-	localOnly := []models.TrackContent{}
-	for _, v := range localTracks {
-		if v.Id == "" {
-			localOnly = append(localOnly, v)
-		} else {
-			trackStatus[v.Id] += 1
-		}
-	}
-	for _, v := range remoteTracks {
-		trackStatus[v.Id] += 2
-	}
-
-	remoteOnly := []models.TrackContent{}
-	both := []models.TrackContent{}
-	for id, bit := range trackStatus {
-		if bit == 1 {
-			localOnly = append(localOnly, idToTrack[id])
-		}
-		if bit == 2 {
-			remoteOnly = append(remoteOnly, idToTrack[id])
-		}
-		if bit == 3 {
-			both = append(both, idToTrack[id])
-		}
-	}
-
-	return diffTrack{localOnly: localOnly, remoteOnly: remoteOnly, both: both}, nil
-}
-
-func (m *model) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
+func (m *service) CreatePlaylistDirectory(playlist models.PlaylistContent) error {
 	// generate a playlist detail file
 	err := m.repository.CreatePlaylistContent(playlist)
 	if err != nil {
@@ -411,7 +227,7 @@ func replaceBannedCharacter(path string) string {
 	return reg.ReplaceAllString(path, " ")
 }
 
-func (m *model) PullPlaylists() error {
+func (m *service) PullPlaylists() error {
 	playlists, err := m.repository.FetchRemotePlaylistContent()
 	if err != nil {
 		return err
