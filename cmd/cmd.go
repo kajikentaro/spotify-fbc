@@ -88,7 +88,7 @@ var compareCmd = &cobra.Command{
 		client, _ := setup(ctx)
 		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		model := services.NewModel(repository)
-		if err := model.ComparePlaylists(); err != nil {
+		if err := model.Compare(); err != nil {
 			log.Fatalln(err)
 		}
 	},

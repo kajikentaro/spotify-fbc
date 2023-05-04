@@ -81,7 +81,7 @@ func (m *model) addRemoteTrack(playlist models.PlaylistContent, tracks []models.
 
 func (m *model) PushPlaylists() error {
 	// プレイリストの差分を検出
-	diff, err := m.calcDiffPlaylist()
+	diff, err := m.compareAll()
 	if err != nil {
 		return err
 	}
@@ -89,24 +89,18 @@ func (m *model) PushPlaylists() error {
 	// 新規追加プレイリストをpushする
 	for _, v := range diff.localOnly {
 		// プレイリストをリモートに作成
-		resPlaylist, err := m.repository.CreateRemotePlaylist(v.DirName)
+		resPlaylist, err := m.repository.CreateRemotePlaylist(v.playlist.DirName)
 		if err != nil {
 			return err
 		}
-		fmt.Println("+", v.DirName)
+		fmt.Println("+", v.playlist.DirName)
 
 		// プレイリストファイルをローカルに新規に生成する
-		resPlaylist.DirName = v.DirName
+		resPlaylist.DirName = v.playlist.DirName
 		m.repository.CreatePlaylistContent(resPlaylist)
 
-		// ローカルの曲を取得
-		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
-		if err != nil {
-			return err
-		}
-
 		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(resPlaylist, tracks); err != nil {
+		if err := m.addRemoteTrack(resPlaylist, v.tracks); err != nil {
 			return err
 		}
 	}
@@ -121,24 +115,15 @@ func (m *model) PushPlaylists() error {
 	}
 
 	for _, v := range diff.both {
-		// トラックの差分を検出
-		diff, err := m.calcDiffTrack(v)
-		if err != nil {
-			return err
-		}
-		// 差分が0の場合は何もしない
-		if len(diff.localOnly) == 0 && len(diff.remoteOnly) == 0 {
-			continue
-		}
-		fmt.Println(" ", v.Name)
+		fmt.Println(" ", v.playlist.Name)
 
 		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(v, diff.localOnly); err != nil {
+		if err := m.addRemoteTrack(v.playlist, v.tracksLocalOnly); err != nil {
 			return err
 		}
 
 		// 曲をリモートのプレイリストから削除
-		err = m.repository.RemoveRemoteTrack(v, diff.remoteOnly)
+		err = m.repository.RemoveRemoteTrack(v.playlist, v.tracksRemoteOnly)
 		if err != nil {
 			return err
 		}
@@ -158,19 +143,73 @@ func (m *model) PushPlaylists() error {
 	return nil
 }
 
-func (m *model) ComparePlaylists() error {
-	diff, err := m.calcDiffPlaylist()
+type diffAll struct {
+	localOnly []struct {
+		playlist models.PlaylistContent
+		tracks   []models.TrackContent
+	}
+	remoteOnly []models.PlaylistContent
+	both       []struct {
+		playlist         models.PlaylistContent
+		tracksRemoteOnly []models.TrackContent
+		tracksLocalOnly  []models.TrackContent
+	}
+}
+
+func (m *model) compareAll() (diffAll, error) {
+	playlistDiff, err := m.calcDiffPlaylist()
+	if err != nil {
+		return diffAll{}, err
+	}
+
+	answer := diffAll{}
+
+	for _, v := range playlistDiff.localOnly {
+		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
+		if err != nil {
+			return diffAll{}, err
+		}
+
+		r := struct {
+			playlist models.PlaylistContent
+			tracks   []models.TrackContent
+		}{}
+		r.playlist = v
+		r.tracks = tracks
+		answer.localOnly = append(answer.localOnly, r)
+	}
+
+	answer.remoteOnly = playlistDiff.remoteOnly
+
+	for _, v := range playlistDiff.both {
+		diff, err := m.calcDiffTrack(v)
+		if err != nil {
+			return diffAll{}, err
+		}
+
+		r := struct {
+			playlist         models.PlaylistContent
+			tracksRemoteOnly []models.TrackContent
+			tracksLocalOnly  []models.TrackContent
+		}{}
+		r.playlist = v
+		r.tracksRemoteOnly = diff.remoteOnly
+		r.tracksLocalOnly = diff.localOnly
+		answer.both = append(answer.both, r)
+	}
+
+	return answer, nil
+}
+
+func (m *model) Compare() error {
+	diff, err := m.compareAll()
 	if err != nil {
 		return err
 	}
 
 	for _, v := range diff.localOnly {
-		fmt.Println("+", v.DirName)
-		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
-		if err != nil {
-			return err
-		}
-		for _, w := range tracks {
+		fmt.Println("+", v.playlist.DirName)
+		for _, w := range v.tracks {
 			fmt.Println("  +", w.FileName)
 		}
 	}
@@ -180,21 +219,11 @@ func (m *model) ComparePlaylists() error {
 	}
 
 	for _, v := range diff.both {
-		diff, err := m.calcDiffTrack(v)
-		if err != nil {
-			return err
-		}
-		// 差分が0の場合は何も出力しない
-		if len(diff.localOnly) == 0 && len(diff.remoteOnly) == 0 {
-			continue
-		}
-
-		fmt.Println(" ", v.Name)
-
-		for _, w := range diff.localOnly {
+		fmt.Println(" ", v.playlist.Name)
+		for _, w := range v.tracksLocalOnly {
 			fmt.Println("  +", w.FileName)
 		}
-		for _, w := range diff.remoteOnly {
+		for _, w := range v.tracksRemoteOnly {
 			fmt.Println("  -", w.Name)
 		}
 	}
