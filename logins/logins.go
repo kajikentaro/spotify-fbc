@@ -63,6 +63,8 @@ func (l *Login) Login() error {
 	ch := make(chan string)
 	defer close(ch)
 
+	codeCtx, codeCancel := context.WithCancel(l.ctx)
+
 	if l.redirectURI == "http://localhost:8080/callback" {
 		fmt.Println("Waiting a callback. You can also paste code:")
 		// 'code'取得用のサーバーを立てる
@@ -74,7 +76,13 @@ func (l *Login) Login() error {
 			} else if state != s {
 				w.Write([]byte("Error: query 'state' is wrong."))
 			} else {
-				ch <- code
+				// チャネルが閉じてない場合のみ送信する
+				select {
+				case <-codeCtx.Done():
+					return
+				default:
+					ch <- code
+				}
 				w.Write([]byte("OAuth login was successful. You can close this window."))
 			}
 		})
@@ -92,10 +100,19 @@ func (l *Login) Login() error {
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		code := scanner.Text()
-		ch <- code
+
+		// チャネルが閉じてない場合のみ送信する
+		select {
+		case <-codeCtx.Done():
+			return
+		default:
+			ch <- code
+		}
 	}()
 
 	code := <-ch
+	codeCancel()
+
 	token, err := auth.Exchange(l.ctx, code)
 	if err != nil {
 		return err
