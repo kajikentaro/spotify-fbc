@@ -40,6 +40,14 @@ func (r *Repository) FetchRemotePlaylistTrack(id string) ([]models.TrackContent,
 			return nil, fmt.Errorf("failed to fetch playlist %s: %s", id, err)
 		}
 		for _, playlistItem := range playlistItemPage.Items {
+			if playlistItem.Track.Track == nil {
+				if playlistItem.Track.Episode != nil {
+					// TODO: PodCastの場合
+					continue
+				} else {
+					panic(fmt.Sprintf("playlist item is not track and episode: %v", playlistItem))
+				}
+			}
 			track := playlistItem.Track.Track
 			trackContent := models.FullTrackToContent(track)
 			result = append(result, trackContent)
