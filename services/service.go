@@ -119,7 +119,7 @@ func (m *service) Compare() error {
 	return nil
 }
 
-func (m *service) PushPlaylists() error {
+func (m *service) OverwritePlaylists() error {
 	fmt.Fprintln(os.Stderr, "now loading ...")
 	isChange := false
 

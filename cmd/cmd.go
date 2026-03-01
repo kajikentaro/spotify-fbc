@@ -34,7 +34,7 @@ func init() {
 	rootCmd.AddCommand(logoutCmd)
 	rootCmd.AddCommand(resetCmd)
 	rootCmd.AddCommand(compareCmd)
-	rootCmd.AddCommand(pushCmd)
+	rootCmd.AddCommand(overwriteCmd)
 	rootCmd.AddCommand(cleanCmd)
 }
 
@@ -63,8 +63,9 @@ Edit your playlists by moving directories and file locations`,
 }
 
 // TODO: 特定プレイリストのみのpush機能
-var pushCmd = &cobra.Command{
-	Use:   "push",
+
+var overwriteCmd = &cobra.Command{
+	Use:   "overwrite",
 	Short: "Synchronize your local files and directories with your spotify account",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
@@ -74,7 +75,7 @@ var pushCmd = &cobra.Command{
 		if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
 			return
 		}
-		if err := model.PushPlaylists(); err != nil {
+		if err := model.OverwritePlaylists(); err != nil {
 			log.Fatalln(err)
 		}
 	},
