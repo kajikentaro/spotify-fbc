@@ -1,6 +1,7 @@
 package service_compares
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/kajikentaro/spotify-fbc/models"
@@ -20,7 +21,7 @@ type PlaylistTrackDiff struct {
 	Tracks   []WithDiffState[models.TrackContent]
 }
 
-func (m *compare) CompareAll() ([]PlaylistTrackDiff, error) {
+func (m *compare) CompareAllPlaylistWithRemote() ([]PlaylistTrackDiff, error) {
 	playlistDiff, err := m.CalcDiffPlaylist()
 	if err != nil {
 		return nil, err
@@ -28,35 +29,46 @@ func (m *compare) CompareAll() ([]PlaylistTrackDiff, error) {
 
 	res := []PlaylistTrackDiff{}
 	for _, v := range playlistDiff {
-		if v.DiffState == LocalOnly {
-			tracks, err := m.repository.FetchLocalPlaylistTrack(v.V.DirName)
-			if err != nil {
-				return nil, err
-			}
-			trackWithDiffStates := make([]WithDiffState[models.TrackContent], len(tracks))
-			for i, track := range tracks {
-				trackWithDiffStates[i] = WithDiffState[models.TrackContent]{V: track, DiffState: LocalOnly}
-			}
-			r := PlaylistTrackDiff{Playlist: v, Tracks: trackWithDiffStates}
-			res = append(res, r)
+		partial, err := m.CompareSinglePlaylistWithRemote(v)
+		if err != nil {
+			return nil, err
 		}
-
-		if v.DiffState == RemoteOnly {
-			// パフォーマンスのため、Remoteにのみ存在するTrackはfetchしない (必要があれば後で修正する)
-			res = append(res, PlaylistTrackDiff{Playlist: v})
-		}
-
-		if v.DiffState == Both {
-			diff, err := m.calcDiffTrack(v.V)
-			if err != nil {
-				return nil, err
-			}
-			r := PlaylistTrackDiff{Playlist: v, Tracks: diff}
-			res = append(res, r)
-		}
+		res = append(res, partial)
 	}
 
 	return res, nil
+}
+
+func (m *compare) CompareSinglePlaylistWithRemote(v WithDiffState[models.PlaylistContent]) (PlaylistTrackDiff, error) {
+	if v.DiffState == LocalOnly {
+		tracks, err := m.repository.FetchLocalPlaylistTrack(v.V.DirName)
+		if err != nil {
+			return PlaylistTrackDiff{}, err
+		}
+		trackWithDiffStates := make([]WithDiffState[models.TrackContent], len(tracks))
+		for i, track := range tracks {
+			trackWithDiffStates[i] = WithDiffState[models.TrackContent]{V: track, DiffState: LocalOnly}
+		}
+		r := PlaylistTrackDiff{Playlist: v, Tracks: trackWithDiffStates}
+		return r, nil
+	}
+
+	if v.DiffState == RemoteOnly {
+		// パフォーマンスのため、Remoteにのみ存在するTrackはfetchしない (必要があれば後で修正する)
+		r := PlaylistTrackDiff{Playlist: v}
+		return r, nil
+	}
+
+	if v.DiffState == Both {
+		diff, err := m.calcDiffTrack(v.V)
+		if err != nil {
+			return PlaylistTrackDiff{}, err
+		}
+		r := PlaylistTrackDiff{Playlist: v, Tracks: diff}
+		return r, nil
+	}
+
+	return PlaylistTrackDiff{}, errors.New("invalid DiffState")
 }
 
 func (m *compare) CalcDiffPlaylist() ([]WithDiffState[models.PlaylistContent], error) {

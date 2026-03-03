@@ -152,7 +152,7 @@ func (m *service) OverwritePlaylists() error {
 
 	// プレイリストの差分を検出
 	compare := service_compares.NewCompare(m.repository)
-	diff, err := compare.CompareAll()
+	diff, err := compare.CompareAllPlaylistWithRemote()
 	if err != nil {
 		return err
 	}
@@ -235,6 +235,44 @@ func (m *service) PullPlaylists() error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (m *service) PushSpecificPlaylist(playlistName string) error {
+	fmt.Fprintln(os.Stderr, "now loading ...")
+
+	// 一旦プレイリストだけのの差分を検出
+	compare := service_compares.NewCompare(m.repository)
+	allPlaylists, err := compare.CalcDiffPlaylist()
+	if err != nil {
+		return err
+	}
+
+	//　該当プレイリストを検索
+	var playlist *service_compares.WithDiffState[models.PlaylistContent]
+	for _, v := range allPlaylists {
+		if v.V.DirName == playlistName {
+			playlist = &v
+			break
+		}
+	}
+	if playlist == nil {
+		return fmt.Errorf("playlist '%s' not found", playlistName)
+	}
+
+	diff, err := compare.CompareSinglePlaylistWithRemote(*playlist)
+	if err != nil {
+		return err
+	}
+
+	changed, err := m.syncLocalPlaylistWithRemote(diff)
+	if err != nil {
+		return err
+	}
+
+	if !changed {
+		fmt.Println("\nthere was no change on remote")
 	}
 	return nil
 }

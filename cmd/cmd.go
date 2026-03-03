@@ -37,8 +37,10 @@ func init() {
 	rootCmd.AddCommand(compareCmd)
 	rootCmd.AddCommand(overwriteCmd)
 	rootCmd.AddCommand(cleanCmd)
+	rootCmd.AddCommand(pushCmd)
 
 	overwriteCmd.Flags().BoolP("dry-run", "d", false, "Simulate the overwrite operation without making changes")
+	pushCmd.Flags().BoolP("dry-run", "d", false, "Simulate the push operation without making changes")
 }
 
 var cleanCmd = &cobra.Command{
@@ -65,7 +67,36 @@ var rootCmd = &cobra.Command{
 Edit your playlists by moving directories and file locations`,
 }
 
-// TODO: 特定プレイリストのみのpush機能
+var pushCmd = &cobra.Command{
+	Use:   "push [playlist name]",
+	Short: "Push a specific local playlist to your Spotify account",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		if dryRun {
+			fmt.Println("Dry run enabled: No changes will be made.")
+		} else {
+			if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
+				return
+			}
+		}
+
+		ctx := context.Background()
+		client, _ := setup(ctx)
+		var repository interfaces.Repository
+		if dryRun {
+			repository = repositories.NewReadOnlyRepository(client, ctx, ".", true)
+		} else {
+			repository = repositories.NewRepository(client, ctx, ".")
+		}
+		service := services.NewService(repository)
+
+		playlistName := args[0]
+		if err := service.PushSpecificPlaylist(playlistName); err != nil {
+			log.Fatalln(err)
+		}
+	},
+}
 
 var overwriteCmd = &cobra.Command{
 	Use:   "overwrite",
@@ -88,8 +119,8 @@ var overwriteCmd = &cobra.Command{
 		} else {
 			repository = repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		}
-		model := services.NewService(repository)
-		if err := model.OverwritePlaylists(); err != nil {
+		service := services.NewService(repository)
+		if err := service.OverwritePlaylists(); err != nil {
 			log.Fatalln(err)
 		}
 	},
