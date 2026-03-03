@@ -8,16 +8,16 @@ import (
 	"regexp"
 
 	"github.com/kajikentaro/spotify-fbc/models"
-	"github.com/kajikentaro/spotify-fbc/repositories"
 	service_compares "github.com/kajikentaro/spotify-fbc/services/compares"
+	"github.com/kajikentaro/spotify-fbc/services/interfaces"
 	"github.com/kajikentaro/spotify-fbc/services/uniques"
 )
 
 type service struct {
-	repository *repositories.Repository
+	repository interfaces.Repository
 }
 
-func NewService(repository *repositories.Repository) service {
+func NewService(repository interfaces.Repository) service {
 	return service{repository: repository}
 }
 
@@ -128,9 +128,75 @@ func (m *service) Compare() error {
 	return nil
 }
 
+func (m *service) syncLocalPlaylistWithRemote(v service_compares.PlaylistTrackDiff) (changed bool, err error) {
+	pl := v.Playlist
+
+	// プレイリストの作成/削除
+	if pl.DiffState == service_compares.LocalOnly {
+		// プレイリストをリモートに作成
+		resPlaylist, err := m.repository.CreateRemotePlaylist(pl.V.DirName)
+		if err != nil {
+			return false, err
+		}
+		pl.V = resPlaylist
+		// プレイリストファイルをローカルに新規に生成する
+		resPlaylist.DirName = pl.V.DirName
+		m.repository.CreatePlaylistContent(resPlaylist)
+		changed = true
+		fmt.Println("+", pl.V.DirName)
+	}
+	if pl.DiffState == service_compares.RemoteOnly {
+		// プレイリストをリモートから削除
+		err := m.repository.RemoveRemotePlaylist(pl.V)
+		if err != nil {
+			return false, err
+		}
+		changed = true
+		fmt.Println("-", pl.V.Name)
+
+		// 削除の場合はここで終わり
+		return changed, nil
+	}
+	if pl.DiffState == service_compares.Both {
+		fmt.Println(" ", pl.V.Name)
+	}
+
+	localOnlyTracks := []models.TrackContent{}
+	remoteOnlyTracks := []models.TrackContent{}
+	for _, w := range v.Tracks {
+		if w.DiffState == service_compares.LocalOnly {
+			localOnlyTracks = append(localOnlyTracks, w.V)
+		}
+		if w.DiffState == service_compares.RemoteOnly {
+			remoteOnlyTracks = append(remoteOnlyTracks, w.V)
+		}
+	}
+
+	// 曲をプレイリストに追加
+	if err := m.addRemoteTrack(pl.V, localOnlyTracks); err != nil {
+		return false, err
+	}
+	for _, w := range localOnlyTracks {
+		fmt.Println("  +", w.FileName)
+		changed = true
+	}
+
+	// 曲をリモートのプレイリストから削除
+	err = m.repository.RemoveRemoteTrack(pl.V, remoteOnlyTracks)
+	if err != nil {
+		return false, err
+	}
+	for _, w := range remoteOnlyTracks {
+		fmt.Println("  -", w.Name)
+		changed = true
+	}
+
+	return changed, nil
+}
+
 func (m *service) OverwritePlaylists() error {
 	fmt.Fprintln(os.Stderr, "now loading ...")
-	isChange := false
+	changed := false
 
 	// プレイリストの差分を検出
 	compare := service_compares.NewCompare(m.repository)
@@ -140,65 +206,11 @@ func (m *service) OverwritePlaylists() error {
 	}
 
 	for _, v := range diff {
-		// 新規追加プレイリストをpushする
-		if v.Playlist.DiffState == service_compares.LocalOnly {
-			// プレイリストをリモートに作成
-			resPlaylist, err := m.repository.CreateRemotePlaylist(v.Playlist.V.DirName)
-			if err != nil {
-				return err
-			}
-			isChange = true
-			fmt.Println("+", v.Playlist.V.DirName)
-
-			// プレイリストファイルをローカルに新規に生成する
-			resPlaylist.DirName = v.Playlist.V.DirName
-			m.repository.CreatePlaylistContent(resPlaylist)
-
-			// 曲をプレイリストに追加
-			if err := m.addRemoteTrack(resPlaylist, service_compares.UnwrapDiffState(v.Tracks)); err != nil {
-				return err
-			}
+		_changed, err := m.syncLocalPlaylistWithRemote(v)
+		if err != nil {
+			return err
 		}
-
-		if v.Playlist.DiffState == service_compares.RemoteOnly {
-			// プレイリストをリモートから削除
-			err := m.repository.RemoveRemotePlaylist(v.Playlist.V)
-			if err != nil {
-				return err
-			}
-			isChange = true
-			fmt.Println("-", v.Playlist.V.Name)
-		}
-
-		if v.Playlist.DiffState == service_compares.Both {
-			isChange = true
-			fmt.Println(" ", v.Playlist.V.Name)
-
-			localOnlyTracks := []models.TrackContent{}
-			remoteOnlyTracks := []models.TrackContent{}
-			for _, w := range v.Tracks {
-				if w.DiffState == service_compares.LocalOnly {
-					localOnlyTracks = append(localOnlyTracks, w.V)
-				}
-				if w.DiffState == service_compares.RemoteOnly {
-					remoteOnlyTracks = append(remoteOnlyTracks, w.V)
-				}
-			}
-
-			// 曲をプレイリストに追加
-			if err := m.addRemoteTrack(v.Playlist.V, localOnlyTracks); err != nil {
-				return err
-			}
-
-			// 曲をリモートのプレイリストから削除
-			err = m.repository.RemoveRemoteTrack(v.Playlist.V, remoteOnlyTracks)
-			if err != nil {
-				return err
-			}
-			for _, w := range remoteOnlyTracks {
-				fmt.Println("  -", w.Name)
-			}
-		}
+		changed = changed || _changed
 	}
 
 	// 後片付け: 不要なプレイリストテキストを消去
@@ -210,7 +222,7 @@ func (m *service) OverwritePlaylists() error {
 		return err
 	}
 
-	if !isChange {
+	if !changed {
 		fmt.Println("\nthere was no change on remote")
 	}
 	return nil

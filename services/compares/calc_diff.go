@@ -13,14 +13,6 @@ type WithDiffState[T any] struct {
 	DiffState DiffState
 }
 
-func UnwrapDiffState[T any](withDiffState []WithDiffState[T]) []T {
-	res := make([]T, len(withDiffState))
-	for i, v := range withDiffState {
-		res[i] = v.V
-	}
-	return res
-}
-
 func calcDiff[T any](local []T, remote []T, getId func(T) string, merge func(local T, remote T) T) []WithDiffState[T] {
 	res := []WithDiffState[T]{}
 

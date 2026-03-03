@@ -4,14 +4,14 @@ import (
 	"fmt"
 
 	"github.com/kajikentaro/spotify-fbc/models"
-	"github.com/kajikentaro/spotify-fbc/repositories"
+	"github.com/kajikentaro/spotify-fbc/services/interfaces"
 )
 
 type compare struct {
-	repository *repositories.Repository
+	repository interfaces.Repository
 }
 
-func NewCompare(repository *repositories.Repository) compare {
+func NewCompare(repository interfaces.Repository) compare {
 	return compare{repository: repository}
 }
 
@@ -21,7 +21,7 @@ type PlaylistTrackDiff struct {
 }
 
 func (m *compare) CompareAll() ([]PlaylistTrackDiff, error) {
-	playlistDiff, err := m.calcDiffPlaylist()
+	playlistDiff, err := m.CalcDiffPlaylist()
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (m *compare) CompareAll() ([]PlaylistTrackDiff, error) {
 	return res, nil
 }
 
-func (m *compare) calcDiffPlaylist() ([]WithDiffState[models.PlaylistContent], error) {
+func (m *compare) CalcDiffPlaylist() ([]WithDiffState[models.PlaylistContent], error) {
 	localPLs, err := m.repository.FetchLocalPlaylistContent()
 	if err != nil {
 		return nil, err
