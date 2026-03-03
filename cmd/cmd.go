@@ -12,6 +12,7 @@ import (
 	"github.com/kajikentaro/spotify-fbc/logins"
 	"github.com/kajikentaro/spotify-fbc/repositories"
 	"github.com/kajikentaro/spotify-fbc/services"
+	"github.com/kajikentaro/spotify-fbc/services/interfaces"
 	"github.com/spf13/cobra"
 	"github.com/zmb3/spotify/v2"
 )
@@ -36,6 +37,8 @@ func init() {
 	rootCmd.AddCommand(compareCmd)
 	rootCmd.AddCommand(overwriteCmd)
 	rootCmd.AddCommand(cleanCmd)
+
+	overwriteCmd.Flags().BoolP("dry-run", "d", false, "Simulate the overwrite operation without making changes")
 }
 
 var cleanCmd = &cobra.Command{
@@ -68,13 +71,24 @@ var overwriteCmd = &cobra.Command{
 	Use:   "overwrite",
 	Short: "Synchronize your local files and directories with your spotify account",
 	Run: func(cmd *cobra.Command, args []string) {
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		if dryRun {
+			fmt.Println("Dry run enabled: No changes will be made.")
+		} else {
+			if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
+				return
+			}
+		}
+
 		ctx := context.Background()
 		client, _ := setup(ctx)
-		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
-		model := services.NewService(repository)
-		if !askForConfirmation("WARNING: Your remote spotify playlist will be replaced") {
-			return
+		var repository interfaces.Repository
+		if dryRun {
+			repository = repositories.NewReadOnlyRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT, true)
+		} else {
+			repository = repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
 		}
+		model := services.NewService(repository)
 		if err := model.OverwritePlaylists(); err != nil {
 			log.Fatalln(err)
 		}
@@ -87,9 +101,9 @@ var compareCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		client, _ := setup(ctx)
-		repository := repositories.NewRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT)
+		repository := repositories.NewReadOnlyRepository(client, ctx, SPOTIFY_PLAYLIST_ROOT, false)
 		service := services.NewService(repository)
-		if err := service.Compare(); err != nil {
+		if err := service.OverwritePlaylists(); err != nil {
 			log.Fatalln(err)
 		}
 	},

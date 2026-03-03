@@ -80,54 +80,6 @@ func (m *service) addRemoteTrack(playlist models.PlaylistContent, tracks []model
 	return nil
 }
 
-func (m *service) Compare() error {
-	fmt.Fprintln(os.Stderr, "now loading ...")
-
-	compare := service_compares.NewCompare(m.repository)
-
-	diff, err := compare.CompareAll()
-	if err != nil {
-		return err
-	}
-
-	foundDiff := false
-	for _, v := range diff {
-		if v.Playlist.DiffState == service_compares.LocalOnly {
-			fmt.Println("+", v.Playlist.V.DirName)
-			for _, w := range v.Tracks {
-				fmt.Println("  +", w.V.FileName)
-			}
-			foundDiff = true
-		}
-
-		if v.Playlist.DiffState == service_compares.RemoteOnly {
-			foundDiff = true
-			fmt.Println("-", v.Playlist.V.Name)
-		}
-
-		if v.Playlist.DiffState == service_compares.Both {
-			fmt.Println(" ", v.Playlist.V.Name)
-
-			for _, w := range v.Tracks {
-				if w.DiffState == service_compares.LocalOnly {
-					fmt.Println("  +", w.V.FileName)
-					foundDiff = true
-				}
-				if w.DiffState == service_compares.RemoteOnly {
-					fmt.Println("  -", w.V.Name)
-					foundDiff = true
-				}
-			}
-		}
-	}
-
-	if !foundDiff {
-		fmt.Println("\nthere is no difference")
-	}
-
-	return nil
-}
-
 func (m *service) syncLocalPlaylistWithRemote(v service_compares.PlaylistTrackDiff) (changed bool, err error) {
 	pl := v.Playlist
 
