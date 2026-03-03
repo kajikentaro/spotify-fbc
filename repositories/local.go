@@ -9,8 +9,39 @@ import (
 	"github.com/kajikentaro/spotify-fbc/models"
 )
 
-// ローカルのプレイリスト情報txtファイルを読み込み
 func (r *Repository) FetchLocalPlaylistContent() ([]models.PlaylistContent, error) {
+	// プレイリスト情報のテキストファイル読み込み
+	playlistContents, err := r.fetchLocalPlaylistTxt()
+	if err != nil {
+		return nil, err
+	}
+	// 検索しやすいようにmapにする
+	dirNameToPL := map[string]models.PlaylistContent{}
+	for _, v := range playlistContents {
+		dirNameToPL[v.DirName] = v
+	}
+
+	// ディレクトリの一覧を取得
+	dirs, err := r.fetchLocalPlaylistDir()
+	if err != nil {
+		return nil, err
+	}
+	// ディレクトリを "プレイリスト情報のテキストファイル" の情報と関連付けて配列で保存
+	localPLs := []models.PlaylistContent{}
+	for _, v := range dirs {
+		if w, isExist := dirNameToPL[v]; isExist {
+			// プレイリスト情報txtが存在する場合
+			localPLs = append(localPLs, w)
+		} else {
+			localPLs = append(localPLs, models.PlaylistContent{DirName: v})
+		}
+	}
+
+	return localPLs, nil
+}
+
+// ローカルのプレイリスト情報txtファイルを読み込み
+func (r *Repository) fetchLocalPlaylistTxt() ([]models.PlaylistContent, error) {
 	entries, err := os.ReadDir(r.rootPath)
 	if err != nil {
 		return nil, err
@@ -40,7 +71,7 @@ func (r *Repository) FetchLocalPlaylistContent() ([]models.PlaylistContent, erro
 }
 
 // ローカルのディレクトリ一覧を読み込み
-func (r *Repository) FetchLocalPlaylistDir() ([]string, error) {
+func (r *Repository) fetchLocalPlaylistDir() ([]string, error) {
 	entries, err := os.ReadDir(r.rootPath)
 	if err != nil {
 		return nil, err
@@ -139,7 +170,7 @@ func (r *Repository) RemoveTrackContent(dirName string, track models.TrackConten
 
 // 不要なプレイリスト情報txtファイルを消去する
 func (r *Repository) CleanUpPlaylistContent() ([]string, error) {
-	dirs, err := r.FetchLocalPlaylistDir()
+	dirs, err := r.fetchLocalPlaylistDir()
 	if err != nil {
 		return nil, err
 	}

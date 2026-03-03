@@ -90,29 +90,38 @@ func (m *service) Compare() error {
 		return err
 	}
 
-	for _, v := range diff.LocalOnly {
-		fmt.Println("+", v.Playlist.DirName)
-		for _, w := range v.Tracks {
-			fmt.Println("  +", w.FileName)
+	foundDiff := false
+	for _, v := range diff {
+		if v.Playlist.DiffState == service_compares.LocalOnly {
+			fmt.Println("+", v.Playlist.V.DirName)
+			for _, w := range v.Tracks {
+				fmt.Println("  +", w.V.FileName)
+			}
+			foundDiff = true
+		}
+
+		if v.Playlist.DiffState == service_compares.RemoteOnly {
+			foundDiff = true
+			fmt.Println("-", v.Playlist.V.Name)
+		}
+
+		if v.Playlist.DiffState == service_compares.Both {
+			fmt.Println(" ", v.Playlist.V.Name)
+
+			for _, w := range v.Tracks {
+				if w.DiffState == service_compares.LocalOnly {
+					fmt.Println("  +", w.V.FileName)
+					foundDiff = true
+				}
+				if w.DiffState == service_compares.RemoteOnly {
+					fmt.Println("  -", w.V.Name)
+					foundDiff = true
+				}
+			}
 		}
 	}
 
-	for _, v := range diff.RemoteOnly {
-		fmt.Println("-", v.Name)
-	}
-
-	for _, v := range diff.Both {
-		fmt.Println(" ", v.Playlist.Name)
-
-		for _, w := range v.TracksLocalOnly {
-			fmt.Println("  +", w.FileName)
-		}
-		for _, w := range v.TracksRemoteOnly {
-			fmt.Println("  -", w.Name)
-		}
-	}
-
-	if len(diff.RemoteOnly)+len(diff.LocalOnly) == 0 {
+	if !foundDiff {
 		fmt.Println("\nthere is no difference")
 	}
 
@@ -130,52 +139,65 @@ func (m *service) OverwritePlaylists() error {
 		return err
 	}
 
-	// 新規追加プレイリストをpushする
-	for _, v := range diff.LocalOnly {
-		// プレイリストをリモートに作成
-		resPlaylist, err := m.repository.CreateRemotePlaylist(v.Playlist.DirName)
-		if err != nil {
-			return err
-		}
-		isChange = true
-		fmt.Println("+", v.Playlist.DirName)
+	for _, v := range diff {
+		// 新規追加プレイリストをpushする
+		if v.Playlist.DiffState == service_compares.LocalOnly {
+			// プレイリストをリモートに作成
+			resPlaylist, err := m.repository.CreateRemotePlaylist(v.Playlist.V.DirName)
+			if err != nil {
+				return err
+			}
+			isChange = true
+			fmt.Println("+", v.Playlist.V.DirName)
 
-		// プレイリストファイルをローカルに新規に生成する
-		resPlaylist.DirName = v.Playlist.DirName
-		m.repository.CreatePlaylistContent(resPlaylist)
+			// プレイリストファイルをローカルに新規に生成する
+			resPlaylist.DirName = v.Playlist.V.DirName
+			m.repository.CreatePlaylistContent(resPlaylist)
 
-		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(resPlaylist, v.Tracks); err != nil {
-			return err
-		}
-	}
-
-	for _, v := range diff.RemoteOnly {
-		// プレイリストをリモートから削除
-		err := m.repository.RemoveRemotePlaylist(v)
-		if err != nil {
-			return err
-		}
-		isChange = true
-		fmt.Println("-", v.Name)
-	}
-
-	for _, v := range diff.Both {
-		isChange = true
-		fmt.Println(" ", v.Playlist.Name)
-
-		// 曲をプレイリストに追加
-		if err := m.addRemoteTrack(v.Playlist, v.TracksLocalOnly); err != nil {
-			return err
+			// 曲をプレイリストに追加
+			if err := m.addRemoteTrack(resPlaylist, service_compares.UnwrapDiffState(v.Tracks)); err != nil {
+				return err
+			}
 		}
 
-		// 曲をリモートのプレイリストから削除
-		err = m.repository.RemoveRemoteTrack(v.Playlist, v.TracksRemoteOnly)
-		if err != nil {
-			return err
+		if v.Playlist.DiffState == service_compares.RemoteOnly {
+			// プレイリストをリモートから削除
+			err := m.repository.RemoveRemotePlaylist(v.Playlist.V)
+			if err != nil {
+				return err
+			}
+			isChange = true
+			fmt.Println("-", v.Playlist.V.Name)
 		}
-		for _, w := range diff.RemoteOnly {
-			fmt.Println("  -", w.Name)
+
+		if v.Playlist.DiffState == service_compares.Both {
+			isChange = true
+			fmt.Println(" ", v.Playlist.V.Name)
+
+			localOnlyTracks := []models.TrackContent{}
+			remoteOnlyTracks := []models.TrackContent{}
+			for _, w := range v.Tracks {
+				if w.DiffState == service_compares.LocalOnly {
+					localOnlyTracks = append(localOnlyTracks, w.V)
+				}
+				if w.DiffState == service_compares.RemoteOnly {
+					remoteOnlyTracks = append(remoteOnlyTracks, w.V)
+				}
+			}
+
+			// 曲をプレイリストに追加
+			if err := m.addRemoteTrack(v.Playlist.V, localOnlyTracks); err != nil {
+				return err
+			}
+
+			// 曲をリモートのプレイリストから削除
+			err = m.repository.RemoveRemoteTrack(v.Playlist.V, remoteOnlyTracks)
+			if err != nil {
+				return err
+			}
+			for _, w := range remoteOnlyTracks {
+				fmt.Println("  -", w.Name)
+			}
 		}
 	}
 

@@ -15,211 +15,95 @@ func NewCompare(repository *repositories.Repository) compare {
 	return compare{repository: repository}
 }
 
-type diffAll struct {
-	LocalOnly []struct {
-		Playlist models.PlaylistContent
-		Tracks   []models.TrackContent
-	}
-	RemoteOnly []models.PlaylistContent
-	Both       []struct {
-		Playlist         models.PlaylistContent
-		TracksRemoteOnly []models.TrackContent
-		TracksLocalOnly  []models.TrackContent
-	}
+type PlaylistTrackDiff struct {
+	Playlist WithDiffState[models.PlaylistContent]
+	Tracks   []WithDiffState[models.TrackContent]
 }
 
-func (m *compare) CompareAll() (diffAll, error) {
+func (m *compare) CompareAll() ([]PlaylistTrackDiff, error) {
 	playlistDiff, err := m.calcDiffPlaylist()
 	if err != nil {
-		return diffAll{}, err
+		return nil, err
 	}
 
-	answer := diffAll{}
-
-	for _, v := range playlistDiff.localOnly {
-		tracks, err := m.repository.FetchLocalPlaylistTrack(v.DirName)
-		if err != nil {
-			return diffAll{}, err
+	res := []PlaylistTrackDiff{}
+	for _, v := range playlistDiff {
+		if v.DiffState == LocalOnly {
+			tracks, err := m.repository.FetchLocalPlaylistTrack(v.V.DirName)
+			if err != nil {
+				return nil, err
+			}
+			trackWithDiffStates := make([]WithDiffState[models.TrackContent], len(tracks))
+			for i, track := range tracks {
+				trackWithDiffStates[i] = WithDiffState[models.TrackContent]{V: track, DiffState: LocalOnly}
+			}
+			r := PlaylistTrackDiff{Playlist: v, Tracks: trackWithDiffStates}
+			res = append(res, r)
 		}
 
-		r := struct {
-			Playlist models.PlaylistContent
-			Tracks   []models.TrackContent
-		}{}
-		r.Playlist = v
-		r.Tracks = tracks
-		answer.LocalOnly = append(answer.LocalOnly, r)
+		if v.DiffState == RemoteOnly {
+			// パフォーマンスのため、Remoteにのみ存在するTrackはfetchしない (必要があれば後で修正する)
+			res = append(res, PlaylistTrackDiff{Playlist: v})
+		}
+
+		if v.DiffState == Both {
+			diff, err := m.calcDiffTrack(v.V)
+			if err != nil {
+				return nil, err
+			}
+			r := PlaylistTrackDiff{Playlist: v, Tracks: diff}
+			res = append(res, r)
+		}
 	}
 
-	answer.RemoteOnly = playlistDiff.remoteOnly
-
-	for _, v := range playlistDiff.both {
-		diff, err := m.calcDiffTrack(v)
-		if err != nil {
-			return diffAll{}, err
-		}
-
-		if len(diff.localOnly)+len(diff.remoteOnly) == 0 {
-			continue
-		}
-
-		r := struct {
-			Playlist         models.PlaylistContent
-			TracksRemoteOnly []models.TrackContent
-			TracksLocalOnly  []models.TrackContent
-		}{}
-		r.Playlist = v
-		r.TracksRemoteOnly = diff.remoteOnly
-		r.TracksLocalOnly = diff.localOnly
-		answer.Both = append(answer.Both, r)
-	}
-
-	return answer, nil
+	return res, nil
 }
 
-type diffPlaylist struct {
-	localOnly  []models.PlaylistContent
-	remoteOnly []models.PlaylistContent
-	both       []models.PlaylistContent
-}
-
-func (m *compare) calcDiffPlaylist() (diffPlaylist, error) {
-	// プレイリスト情報のテキストファイル読み込み
-	playlistContents, err := m.repository.FetchLocalPlaylistContent()
+func (m *compare) calcDiffPlaylist() ([]WithDiffState[models.PlaylistContent], error) {
+	localPLs, err := m.repository.FetchLocalPlaylistContent()
 	if err != nil {
-		return diffPlaylist{}, err
-	}
-	// 検索しやすいようにmapにする
-	dirNameToPL := map[string]models.PlaylistContent{}
-	for _, v := range playlistContents {
-		dirNameToPL[v.DirName] = v
+		return nil, err
 	}
 
-	// ディレクトリの一覧を取得
-	dirs, err := m.repository.FetchLocalPlaylistDir()
-	if err != nil {
-		return diffPlaylist{}, err
-	}
-	// ディレクトリを "プレイリスト情報のテキストファイル" の情報と関連付けて配列で保存
-	localPLs := []models.PlaylistContent{}
-	for _, v := range dirs {
-		if w, isExist := dirNameToPL[v]; isExist {
-			// プレイリスト情報txtが存在する場合
-			localPLs = append(localPLs, w)
-		} else {
-			localPLs = append(localPLs, models.PlaylistContent{DirName: v})
-		}
-	}
-
-	// リモートのプレイリストを配列で取得
 	remotePLs, err := m.repository.FetchRemotePlaylistContent()
 	if err != nil {
-		return diffPlaylist{}, err
+		return nil, err
 	}
 
-	// 検索しやすいようにmapを作成
-	idToPlaylist := map[string]models.PlaylistContent{}
-	for _, v := range localPLs {
-		idToPlaylist[v.Id] = v
+	getId := func(p models.PlaylistContent) string {
+		return p.Id
 	}
-	for _, v := range remotePLs {
-		// 上書きしないように
-		old := idToPlaylist[v.Id]
-		idToPlaylist[v.Id] = models.PlaylistContent{Name: v.Name, DirName: old.DirName, Id: v.Id}
+	merge := func(local models.PlaylistContent, remote models.PlaylistContent) models.PlaylistContent {
+		return models.PlaylistContent{Name: remote.Name, DirName: local.DirName, Id: remote.Id}
 	}
+	diff := calcDiff(localPLs, remotePLs, getId, merge)
 
-	// localにあれば +1, remoteにあれば +2する
-	// 1ならlocalのみ, 2ならremoteのみ, 3なら両方に存在することになる
-	playlistState := map[string]int{}
-	localOnly := []models.PlaylistContent{}
-	for _, v := range localPLs {
-		if v.Id == "" {
-			localOnly = append(localOnly, v)
-			continue
-		}
-		playlistState[v.Id] += 1
-	}
-	for _, v := range remotePLs {
-		playlistState[v.Id] += 2
-	}
-
-	remoteOnly := []models.PlaylistContent{}
-	both := []models.PlaylistContent{}
-	for id, bit := range playlistState {
-		if bit == 1 {
-			localOnly = append(localOnly, idToPlaylist[id])
-		}
-		if bit == 2 {
-			remoteOnly = append(remoteOnly, idToPlaylist[id])
-		}
-		if bit == 3 {
-			both = append(both, idToPlaylist[id])
-		}
-	}
-
-	return diffPlaylist{localOnly: localOnly, remoteOnly: remoteOnly, both: both}, nil
-
+	return diff, nil
 }
 
-type diffTrack struct {
-	localOnly  []models.TrackContent
-	remoteOnly []models.TrackContent
-	both       []models.TrackContent
-}
-
-func (m *compare) calcDiffTrack(playlist models.PlaylistContent) (diffTrack, error) {
+func (m *compare) calcDiffTrack(playlist models.PlaylistContent) ([]WithDiffState[models.TrackContent], error) {
 	if playlist.DirName == "" {
-		return diffTrack{}, fmt.Errorf("property DirName is empty")
+		return nil, fmt.Errorf("property DirName is empty")
 	}
 	if playlist.Id == "" {
-		return diffTrack{}, fmt.Errorf("property Id is empty")
+		return nil, fmt.Errorf("property Id is empty")
 	}
 
 	localTracks, err := m.repository.FetchLocalPlaylistTrack(playlist.DirName)
 	if err != nil {
-		return diffTrack{}, err
+		return nil, err
 	}
 	remoteTracks, err := m.repository.FetchRemotePlaylistTrack(playlist.Id)
 	if err != nil {
-		return diffTrack{}, err
+		return nil, err
+	}
+	getId := func(track models.TrackContent) string {
+		return track.Id
+	}
+	merge := func(local models.TrackContent, remote models.TrackContent) models.TrackContent {
+		return models.TrackContent{Id: remote.Id, Name: remote.Name, FileName: local.FileName}
 	}
 
-	idToTrack := map[string]models.TrackContent{}
-	for _, v := range localTracks {
-		idToTrack[v.Id] = v
-	}
-	for _, v := range remoteTracks {
-		idToTrack[v.Id] = v
-	}
-
-	// localにあれば +1, remoteにあれば +2する
-	// 1ならlocalのみ, 2ならremoteのみ, 3なら両方に存在することになる
-	trackStatus := map[string]int{}
-	localOnly := []models.TrackContent{}
-	for _, v := range localTracks {
-		if v.Id == "" {
-			localOnly = append(localOnly, v)
-		} else {
-			trackStatus[v.Id] += 1
-		}
-	}
-	for _, v := range remoteTracks {
-		trackStatus[v.Id] += 2
-	}
-
-	remoteOnly := []models.TrackContent{}
-	both := []models.TrackContent{}
-	for id, bit := range trackStatus {
-		if bit == 1 {
-			localOnly = append(localOnly, idToTrack[id])
-		}
-		if bit == 2 {
-			remoteOnly = append(remoteOnly, idToTrack[id])
-		}
-		if bit == 3 {
-			both = append(both, idToTrack[id])
-		}
-	}
-
-	return diffTrack{localOnly: localOnly, remoteOnly: remoteOnly, both: both}, nil
+	res := calcDiff(localTracks, remoteTracks, getId, merge)
+	return res, nil
 }
