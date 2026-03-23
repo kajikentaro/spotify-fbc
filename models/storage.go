@@ -10,7 +10,7 @@ import (
 
 type TrackContent struct {
 	Id       string `title:"id" query:"-"`
-	Name     string `title:"name" query:""`
+	Name     string `title:"name" query:"track"`
 	Artist   string `title:"artist" query:"artist"`
 	Album    string `title:"album" query:"album"`
 	Seconds  string `title:"seconds" query:"-"`
@@ -107,22 +107,16 @@ func (p TrackContent) SearchQuery() string {
 
 	result := ""
 	for i := 0; i < ts.NumField(); i++ {
-		titleValue := ts.Field(i).Tag.Get("query")
+		key := ts.Field(i).Tag.Get("query")
 		// "-"のときは無視
-		if titleValue == "-" {
+		if key == "-" {
 			continue
 		}
-		fieldValue := vs.Field(i).String()
-		if fieldValue == "" {
+		value := vs.Field(i).String()
+		if value == "" {
 			continue
 		}
-		// 曲名のときはタグを付けない
-		if titleValue == "" {
-			result += fieldValue + " "
-			continue
-		}
-
-		result += titleValue + ":" + fieldValue + " "
+		result += key + ":\"" + value + "\" "
 	}
 	return result
 }

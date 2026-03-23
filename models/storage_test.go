@@ -1,6 +1,8 @@
 package models
 
-import "testing"
+import (
+	"testing"
+)
 
 func Test_TrackContent_Marshal(t *testing.T) {
 	tc := TrackContent{
@@ -85,6 +87,23 @@ file_name test track.txt
 		Isrc:     "ABCDEFG",
 		FileName: "test track.txt",
 	}
+	if expected != actual {
+		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
+	}
+}
+
+func TestSearchQuery(t *testing.T) {
+	v := TrackContent{
+		Id:       "123",
+		Name:     "test track",
+		Artist:   "test artist",
+		Album:    "test album",
+		Seconds:  "123",
+		Isrc:     "ABCDEFG",
+		FileName: "test track.txt",
+	}
+	actual := v.SearchQuery()
+	expected := `track:"123" "test track" artist:"test artist" album:"test album" isrc:"ABCDEFG" `
 	if expected != actual {
 		t.Errorf("\nactual:\n%s \nexpected:\n%s", actual, expected)
 	}
