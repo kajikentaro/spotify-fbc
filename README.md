@@ -64,7 +64,7 @@ Available Commands:
   login       Perform login process
   logout      Logout from your spotify account excluding API keys
   pull        Download playlists that your spotify account has. All of your existing local playlists will be overwritten
-  push        Synchronize your local files and directories with your spotify account
+  overwrite   Synchronize your local files and directories with your spotify account
   reset       Delete user-specific data such as OAuth token and Client ID excluding music txt
   version     Print the version number of spotify-fbc
 
@@ -104,7 +104,7 @@ The directory `spotify-fbc` will be created and the songs and playlists will be 
 
 ### (5) Compare difference information
 
-Once you have made the necessary edits to the `spotify-fbc` directory, check the differences before `push`!
+Once you have made the necessary edits to the `spotify-fbc` directory, check the differences before `overwrite`!
 
 ```
 $ spotify-fbc compare
@@ -120,7 +120,7 @@ You will see that the `new playlist` playlist and the song `What Do You Mean?` a
 Execute the following command.
 
 ```txt
-$ spotify-fbc push
+$ spotify-fbc overwrite
 ```
 
 Your existing Spotify playlists will be completely replaced in the `spotify-fbc` directory.
@@ -130,7 +130,7 @@ Run carefully!
 
 A song info text file consists of several properties.
 
-For example, if you create a new file like the following and do `spotify-fbc push`,
+For example, if you create a new file like the following and do `spotify-fbc overwrite`,
 
 ```text
 name What Do You Mean?
