@@ -68,7 +68,9 @@ func (r *Repository) CreateRemotePlaylist(name string) (models.PlaylistContent, 
 	if err != nil {
 		return models.PlaylistContent{}, fmt.Errorf("failed to create playlist %s: %w", name, err)
 	}
-	return models.SimplePlaylistToContent(new.SimplePlaylist), nil
+	res := models.SimplePlaylistToContent(new.SimplePlaylist)
+	res.DirName = res.Name
+	return res, nil
 }
 
 func (r *Repository) addRemoteTrack(playlistId string, tracks []models.TrackContent) ([]models.TrackContent, error) {

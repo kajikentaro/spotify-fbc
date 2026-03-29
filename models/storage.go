@@ -9,13 +9,13 @@ import (
 )
 
 type TrackContent struct {
-	Id       string `title:"id" query:"-"`
-	Name     string `title:"name" query:""`
-	Artist   string `title:"artist" query:"artist"`
-	Album    string `title:"album" query:"album"`
-	Seconds  string `title:"seconds" query:"-"`
-	Isrc     string `title:"isrc" query:"isrc"`
-	FileName string `title:"file_name" query:"-"`
+	Id       string `title:"id"`
+	Name     string `title:"name"`
+	Artist   string `title:"artist"`
+	Album    string `title:"album"`
+	Seconds  string `title:"seconds"`
+	Isrc     string `title:"isrc"`
+	FileName string `title:"file_name"`
 }
 
 type PlaylistContent struct {
@@ -102,29 +102,23 @@ func (p TrackContent) Marshal() string {
 }
 
 func (p TrackContent) SearchQuery() string {
-	ts := reflect.TypeOf(p)
-	vs := reflect.ValueOf(p)
-
-	result := ""
-	for i := 0; i < ts.NumField(); i++ {
-		titleValue := ts.Field(i).Tag.Get("query")
-		// "-"のときは無視
-		if titleValue == "-" {
-			continue
-		}
-		fieldValue := vs.Field(i).String()
-		if fieldValue == "" {
-			continue
-		}
-		// 曲名のときはタグを付けない
-		if titleValue == "" {
-			result += fieldValue + " "
-			continue
-		}
-
-		result += titleValue + ":" + fieldValue + " "
+	if p.Isrc != "" {
+		return "isrc:" + p.Isrc
 	}
-	return result
+
+	SPACER := "+"
+	DELIMITER := "%2520"
+	chunk := []string{}
+	if p.Name != "" {
+		chunk = append(chunk, strings.ReplaceAll(p.Name, " ", SPACER))
+	}
+	if p.Artist != "" {
+		chunk = append(chunk, strings.ReplaceAll(p.Artist, " ", SPACER))
+	}
+	if p.Album != "" {
+		chunk = append(chunk, strings.ReplaceAll(p.Album, " ", SPACER))
+	}
+	return strings.Join(chunk, DELIMITER)
 }
 
 func FullTrackToContent(track *spotify.FullTrack) TrackContent {

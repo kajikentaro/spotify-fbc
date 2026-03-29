@@ -8,6 +8,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/zmb3/spotify/v2 v2.3.1
 	golang.org/x/oauth2 v0.5.0
+	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 )
 
 require (

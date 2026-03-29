@@ -11,6 +11,7 @@ import (
 	service_compares "github.com/kajikentaro/spotify-fbc/services/compares"
 	"github.com/kajikentaro/spotify-fbc/services/interfaces"
 	"github.com/kajikentaro/spotify-fbc/services/uniques"
+	"golang.org/x/sync/errgroup"
 )
 
 type service struct {
@@ -38,9 +39,6 @@ func (m *service) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models
 	}
 
 	for _, w := range res {
-		fmt.Println("  +", w.Name)
-		/* 成功した場合は楽曲txtを作り直す */
-
 		// 削除
 		err := m.repository.RemoveTrackContent(playlist.DirName, w)
 		if err != nil {
@@ -61,23 +59,32 @@ func (m *service) recreateTrackTxt(usedFileStem *uniques.Unique, playlist models
 	}
 }
 
-func (m *service) addRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) error {
+func (m *service) addRemoteTrack(playlist models.PlaylistContent, tracks []models.TrackContent) ([]models.TrackContent, error) {
 	// 曲をリモートのプレイリストに追加
 	c := make(chan []models.TrackContent)
 
-	go func() {
+	successfulTracks := []models.TrackContent{}
+
+	var eg errgroup.Group
+	eg.Go(func() error {
 		usedFileStem := uniques.NewUnique()
 		for cc := range c {
-			// 楽曲txtを作り直す
+			// 成功した場合は楽曲txtを作り直す
 			m.recreateTrackTxt(usedFileStem, playlist, cc)
+			successfulTracks = append(successfulTracks, cc...)
 		}
-	}()
-	err := m.repository.AddRemoteTrack(playlist.Id, tracks, c)
-	close(c)
-	if err != nil {
+		return nil
+	})
+	eg.Go(func() error {
+		err := m.repository.AddRemoteTrack(playlist.Id, tracks, c)
+		close(c)
 		return err
+	})
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
-	return nil
+	return successfulTracks, nil
 }
 
 func (m *service) syncLocalPlaylistWithRemote(v service_compares.PlaylistTrackDiff) (changed bool, err error) {
@@ -125,10 +132,11 @@ func (m *service) syncLocalPlaylistWithRemote(v service_compares.PlaylistTrackDi
 	}
 
 	// 曲をプレイリストに追加
-	if err := m.addRemoteTrack(pl.V, localOnlyTracks); err != nil {
+	addedTracks, err := m.addRemoteTrack(pl.V, localOnlyTracks)
+	if err != nil {
 		return false, err
 	}
-	for _, w := range localOnlyTracks {
+	for _, w := range addedTracks {
 		fmt.Println("  +", w.FileName)
 		changed = true
 	}

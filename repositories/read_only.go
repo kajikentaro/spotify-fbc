@@ -21,6 +21,7 @@ func NewReadOnlyRepository(client *spotify.Client, ctx context.Context, rootPath
 }
 
 func (r *ReadOnlyRepository) AddRemoteTrack(playlistId string, tracks []models.TrackContent, c chan []models.TrackContent) error {
+	c <- tracks
 	if r.showLog {
 		fmt.Printf("===DRY RUN=== AddRemoteTrack: playlistId=%s, tracks=%v\n", playlistId, tracks)
 	}
@@ -52,7 +53,7 @@ func (r *ReadOnlyRepository) CreateRemotePlaylist(name string) (models.PlaylistC
 	if r.showLog {
 		fmt.Printf("===DRY RUN=== CreateRemotePlaylist: name=%s\n", name)
 	}
-	return models.PlaylistContent{Name: name}, nil
+	return models.PlaylistContent{Name: name, DirName: name}, nil
 }
 
 func (r *ReadOnlyRepository) CreateRootDir() error {
